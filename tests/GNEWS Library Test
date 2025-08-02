@@ -1,0 +1,44 @@
+#@title GNEWS Library
+#Credits to: https://pypi.org/project/gnews/
+
+!pip install gnews
+!pip3 install newspaper3k
+
+from gnews import GNews
+import pandas as pd
+proxy = None
+
+#GNEWS main part
+google_news = GNews(
+    language='LANGUAGE CODE (EXAMPLE:es-419)',
+    country='COUNTRY TO LOOK FOR (EXAMPLE: US, UK,MX)',
+    period='(TIME: d, m, y (EXAMPLE: 2d)',
+    #start_date= (2025, 5, 1),
+    #end_date= (2025, 5, 31),
+    max_results=100,
+    exclude_websites=[
+        'EXAMPLE: https://www.lavozdigital.es'
+    ],
+    proxy=proxy
+)
+
+# Query
+n_news = google_news.get_news("agresion medico México")
+
+
+# Change data to table
+formatted_news = []
+for article in n_news:
+    formatted_news.append({
+        "title": article["title"],
+        "description": article["description"],
+        "published date": article["published date"],
+        "url": article["url"],
+        "publisher": article["publisher"]["title"]  # Extrae solo el título del publisher
+    })
+
+# Crear un DataFrame con las columnas adecuadas
+df = pd.DataFrame(formatted_news)
+
+# Guardar el DataFrame en un archivo CSV con codificación utf-8-sig para caracteres especiales
+df.to_csv('N_GNews.csv', encoding='utf-8-sig', index=False)
