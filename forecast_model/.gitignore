@@ -1,0 +1,49 @@
+# === Python artifacts ===
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# === Jupyter Notebook ===
+.ipynb_checkpoints/
+
+# === Environments ===
+.venv/
+env/
+venv/
+ENV/
+
+# === OS Files ===
+.DS_Store
+Thumbs.db
+
+# === IDEs/Editors ===
+.vscode/
+.idea/
+*.swp
+
+# === Logs and temporary files ===
+*.log
+*.tmp
+*.bak
+
+# === Model checkpoints or large outputs ===
+*.h5
+*.pkl
+*.joblib
+*.pt
+
+# === Project-specific ===
+data/processed/
+outputs/
+figures/
+
+# Ignore large raw file
+data/raw/1997-01-01-2025-07-03.csv
+
+# === Git LFS reminder ===
+# Git cannot ignore files by size. Use Git LFS for versioning large files.
+# To track files over 100MB, consider:
+# git lfs install
+# git lfs track "*.csv"
