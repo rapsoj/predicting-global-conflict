@@ -1,0 +1,70 @@
+{
+    "official" :{
+        "metrics" : [
+            "war",
+            "protests",
+            "election",
+            "violence",
+            "conflict",
+            "coup"
+        ],
+        "queries" :[
+            "[metric] in [country] in [year]"
+        ],
+        "countries" : {
+            "South Africa" : "ZA",
+            "United States" : "US",
+            "Russia": "RU",
+            "Turkey": "TR",
+            "Ukraine": "UA",
+            "China": "CN",
+            "Iran": "IR",
+            "India": "IN",
+            "Pakistan": "PK",
+            "Brazil": "BR",
+            "Mexico": "MX",
+            "France": "FR",
+            "Italy": "IT",
+            "Germany": "DE",
+            "Spain": "ES",
+            "United Kingdom": "GB",
+            "Japan": "JP",
+            "Kenya": "KE",
+            "Nigeria": "NG"
+        },
+        "years" : [
+            "2024",
+            "2023",
+            "2022",
+            "2021",
+            "2020",
+            "2019",
+            "2018",
+            "2017",
+            "2016",
+            "2015",
+            "2014",
+            "2013",
+            "2012",
+            "2011",
+            "2010"
+        ]
+    },
+    "testing" :{
+        "years" : [
+            "2024",
+            "2010"
+        ],
+        "countries" : {
+            "Kenya": "KE"
+        },
+        "metrics" : [
+            "war",
+            "protests",
+            "coup"
+        ],
+        "queries" :[
+            "[metric] in [country] in [year]"
+        ]
+    }
+}
