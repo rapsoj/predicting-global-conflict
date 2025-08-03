@@ -1,0 +1,7 @@
+break up into input and output sections
+better organise outputs
+rename output file
+look at queries and objective surrounding prompts and queries
+QA on LLM outputs and articles
+adjust for full articles
+investigate quality of gnews outputs

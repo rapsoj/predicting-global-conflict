@@ -65,12 +65,11 @@ def save_to_csv(filtered_articles):
         print("No articles to save.")
         return
 
-    # Ensure outputs folder exists
     output_dir = os.path.join(os.getcwd(), "outputs")
     os.makedirs(output_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = os.path.join(output_dir, f"news_results_{timestamp}.csv")
+    filename = os.path.join(output_dir, f"{timestamp} scraping_results.csv")
 
     headers = ["year", "month", "country"] + [metric for metric in metrics]
 
@@ -97,7 +96,7 @@ def save_to_csv(filtered_articles):
 
             writer.writerow(row)
 
-    print(f"✅ Saved {len(filtered_articles)} articles to {filename}")
+    print(f"Saved {len(filtered_articles)} articles to {filename}")
 
 
 save_to_csv(filtered_articles)
