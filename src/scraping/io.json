@@ -9,7 +9,7 @@
             "coup"
         ],
         "queries" :[
-            "[metric] in [country] in [year]"
+            "is there a [metric] in [country] in [year]?"
         ],
         "countries" : {
             "South Africa" : "ZA",
