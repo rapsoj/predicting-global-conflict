@@ -5,3 +5,12 @@ look at queries and objective surrounding prompts and queries
 QA on LLM outputs and articles
 adjust for full articles
 investigate quality of gnews outputs
+
+chat with jess
+is election, natural disaster, economic crisis, ethnic tensions or coup
+check wikipedia - databases, election
+world bank - economic crisis
+change up variables
+
+verify with coups
+newspaper3k
