@@ -2,14 +2,13 @@
     "official" :{
         "metrics" : [
             "war",
-            "protests",
+            "coup",
             "election",
-            "violence",
-            "conflict",
-            "coup"
+            "economic crisis",
+            "ethnic tension"
         ],
-        "queries" :[
-            "is there a [metric] in [country] in [year]?"
+        "searches" : [
+            "[metric] in [country] in [year]"
         ],
         "countries" : {
             "South Africa" : "ZA",
@@ -53,15 +52,22 @@
     "testing" :{
         "years" : [
             "2024",
+            "2021",
+            "2015",
+            "2014",
+            "2011",
             "2010"
+        ],
+        "searches" : [
+            "[metric] in [country] in [year]"
         ],
         "countries" : {
             "Kenya": "KE"
         },
         "metrics" : [
-            "war",
-            "protests",
-            "coup"
+            "coup",
+            "election",
+            "economic crisis"
         ],
         "queries" :[
             "[metric] in [country] in [year]"

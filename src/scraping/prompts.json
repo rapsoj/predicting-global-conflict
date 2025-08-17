@@ -1,5 +1,9 @@
 {
-    "gnews_filter": {
-        "instruction" : "You are a news filter. You are going to be given a title, description, published date of a news article as well as the original query. If the title, description, and published date align with the original query, return yes in all lower case, otherwise return no if even a single one might disagree with it. It should be noted that the exception to this is if the published date speaks to a different date mentioned in the title or description. If you are uncertain, just return no."
-    }
+    "general" : {
+        "instruction" : "You are an AI agent existing to parse web articles and answer questions. Follow the questions, especially the output format."
+    },
+    "queries" :{
+            "gnews_filter": "This is the information displayed on the front of google news. Is it likely that this article talks about historical occurences of [all metrics] and possibly references the years in which they occured for [country]? Answer either yes or no. If uncertain, answer yes",
+            "news_query": "Does this article talk about historical occurences of [all metrics] for [country]? And I don't mean any sub categories of those items, I just mean strictly the following items: [all metrics]. If it does, return yes (otherwise return no, nothing else) and then for each occurence, list the country, the metric, and the relevant months. Do this for all countries and all metrics with only one metric on each line. Treat it like a csv and list it month-year as in mm-yyyy, and list all years, don't just go month-year to month-year. List every month and every year. So the format is country 1, metric 1, month1-year1, month2-year2, and so forth, with a new line being required for a new metric or country."
+        }
 }
