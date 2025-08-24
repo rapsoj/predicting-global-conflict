@@ -1,10 +1,13 @@
 # LOADING AND IMPORTING LIBRARIES
 from datetime import datetime
-from dateutil import parser as date_parser
+from dateutil import parser
 
 from gnews_fetcher import GNewsFetcher
 import logic_parser as logic
 from news_boy import get_news_data
+from . import utils
+
+import pandas as pd
 
 import os, json, re, csv
 
@@ -22,6 +25,8 @@ years = io["years"]
 config = json.load(open(os.path.join(os.path.dirname(__file__), "config.json")))
 gnews_filter = config['gnews_filter']
 max_results = config['max results']
+page_timeout = config['page timeout']
+overall_timeout = config['overall timeout']
 
 prompts = json.load(open(os.path.join(os.path.dirname(__file__), "prompts.json")))
 instruction_prompt = prompts["general"]["instruction"]
@@ -30,21 +35,12 @@ news_query_prompt = prompts["queries"]["news_query"]
 
 print("generating searches...")
 # GENERATING SEARCHES and initialising url tracker for efficiency
-def gen_searches():
-    search_array = []
-    for search in searches:
-        for country in countries_names:
-            search_c = search.replace("[country]", country)
-            for metric in metrics:
-                search_m = search_c.replace("[metric]", metric)
-                for year in years:
-                    search_y = search_m.replace("[year]", year)
-                    search_array.append({"search": search_y,
-                                         "country": country
-                                        })
-    return search_array
-
-gnews_searches = gen_searches()
+gnews_searches = utils.generate_search_queries(
+    google_search_templates=searches,
+    country_names=countries_names,
+    search_metrics=metrics,
+    years=years
+)
 print(f"Generated {len(gnews_searches)} searches.")
 visited_urls = []
 
@@ -99,12 +95,9 @@ for result in results:
             continue
         visited_urls.append(article["url"])
         
-        full_text = get_news_data(article["url"], agent="3k")
+        full_text = get_news_data(article["url"], page_delay=page_timeout, overall_timeout=overall_timeout)
         if full_text is None:
             print(f"Failed to fetch article at {url}, skipping...")
-            continue
-        if full_text.strip() == "":
-            print(f"Empty article at {url}, skipping...")
             continue
             
         article["full_text"] = full_text
@@ -112,12 +105,13 @@ for result in results:
 
         response = filtering_agent.get_chatgpt_response(
             instruction_prompt, 
-            f"{news_query_prompt.replace('[country]', article['country'])} {article['full_text']}"
+            f"{news_query_prompt.replace('[country]', article['country'])} {article['full_text'][:min(len(article['full_text']), 4000*4)]}" 
         )
         if response.lower().strip() == "no":
             continue
         
-        article["parsed_response"] = response
+        formatted_response = [row.split(',') for row in response.strip().split("\n")[1:]]
+        article["response"] = formatted_response
         print(f"Response: {response}")
         parsed_articles.append(article)
 
@@ -134,38 +128,59 @@ show_articles()
 # SAVE RESULTS TO CSV
 def save_to_csv(filtered_articles):
     print("saving results to CSV...")
-    if not filtered_articles:
-        print("No articles to save.")
-        return
 
+    data = parsed_articles
+
+    # Parse all dates and determine full month range
+    all_dates = []
+    for row in data:
+        for date_str in row[2:]:
+            try:
+                dt = parser.parse(date_str)
+                all_dates.append(dt.replace(day=1))
+            except Exception as e:
+                print(f"Skipping unparseable date {date_str}: {e}")
+
+    if not all_dates:
+        raise ValueError("No valid dates found!")
+
+    start = min(all_dates)
+    end = max(all_dates)
+
+    # Generate full list of month-year strings
+    all_months = pd.date_range(start=start, end=end, freq='MS')
+    all_months_str = [d.strftime("%B-%Y") for d in all_months]
+
+    # Create output directory
     output_dir = os.path.join(os.getcwd(), "outputs")
     os.makedirs(output_dir, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = os.path.join(output_dir, f"{timestamp} scraping_results.csv")
+    # Generate one DataFrame per metric and save
+    for metric in metrics:
+        # Initialize DataFrame
+        df_metric = pd.DataFrame(0, index=countries, columns=all_months_str)
 
-    headers = ["year", "month", "country"] + [metric for metric in metrics]
-
-    with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=headers)
-        writer.writeheader()
-
-        for article in filtered_articles:
-            try:
-                pub_date = date_parser.parse(article["published date"])
-            except Exception as e:
-                print(f"Error parsing date: {article['published date']} — {e}")
+        # Fill DataFrame
+        for row in data:
+            country, row_metric, *dates = row
+            if row_metric != metric:
                 continue
+            for date_str in dates:
+                try:
+                    dt = parser.parse(date_str)
+                    month_str = dt.strftime("%B-%Y")
+                    if month_str in df_metric.columns:
+                        df_metric.loc[country, month_str] = 1
+                except Exception as e:
+                    print(f"Skipping unparseable date {date_str}: {e}")
 
-            query = article["query"]
-    
+        # Reset index for saving
+        df_metric = df_metric.reset_index().rename(columns={"index": "country"})
 
-            for metric in metrics:
-                row[metric] = int(metric.lower() in query.lower())
+        # Save to CSV
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = os.path.join(output_dir, f"{metric.replace(' ', '_')}_{timestamp}.csv")
+        df_metric.to_csv(filename, index=False)
+        print(f"Saved metric '{metric}' to {filename}")
 
-            writer.writerow(row)
-
-    print(f"Saved {len(filtered_articles)} articles to {filename}")
-
-
-# save_to_csv(articles)
+save_to_csv(parsed_articles)

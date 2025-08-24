@@ -1,5 +1,6 @@
 {
     "gnews_filter" : false,
-    "max results":3
-
+    "max results":3,
+    "page timeout": 2000,
+    "overall timeout": 10000
 }
