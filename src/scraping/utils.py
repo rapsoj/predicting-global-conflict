@@ -29,7 +29,10 @@ def display_article_results(articles : list[dict]):
         print(f"URL: {article['url']}")
         print(f"Parsed: {article.get('parsed_response', 'N/A')}\n")
 
-def save_to_csv(
+def generate_instructions(any_text : str, metrics : list[str]) -> str:
+    return any_text.replace("[all metrics]", ", ".join(metrics))
+
+def save_to_csv( # TODO
     data: list[list[str]],
     metrics: list[str],
     countries: list[str],

@@ -1,24 +1,12 @@
 from newspaper import Article
-import requests
-import time
-from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-
-from newspaper import Article
-import requests
-import time
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
-
-
-def get_news_data(url, page_delay = 3000, overall_timeout = 30000):
-    """
-    Fetch article text from a URL.
-    1. Tries newspaper3k first.
-    2. If 3k fails or returns empty, falls back to Playwright (JS rendering).
-    """
-
+def get_news_site(url, page_delay = 3000, overall_timeout = 30000):
     # 1️⃣ Try newspaper3k
     try:
         article = Article(url)
@@ -60,12 +48,63 @@ def get_news_data(url, page_delay = 3000, overall_timeout = 30000):
         print(f"Playwright failed for {url}: {e}")
         return None
 
+class BrowserSim:
+    def __init__(self, page_wait = 15, min_text_length = 500):
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        self.options = options
+        self.page_wait = page_wait
+        self.min_text_length = min_text_length
+        
+    def start(self):
+        self.driver = webdriver.Chrome(options=self.options)
+
+    def get_page(self, url):
+        self.start_browser()
+        try:
+            self.driver.get(url)
+
+            # Wait until body has some text (timeout after 15s)
+            WebDriverWait(self.driver, self.page_wait).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+
+            p_text,div_text = "", ""
+            body_text = self.driver.find_element("tag name", "body").text
+            if len(body_text) < self.min_text_length:
+                print("Body text too short, trying alternative selectors...")
+
+                p_text = self.driver.find_element("tag name", "p").text
+                if len(p_text) < self.min_text_length:
+                    print("Paragraph text too short, trying alternative selectors...")
+                    div_text = self.driver.find_element("tag name", "div").text
+                    if len(p_text) < self.min_text_length:
+                        print("All methods failed to get sufficient text.")
+                        return None
+                    else:
+                        page_text = div_text
+                else:
+                    page_text = p_text
+            else:
+                page_text = body_text
+
+            print(page_text[:100])
+            return page_text
+        except Exception as e:
+            print(f"Continuing... but\nSelenium failed for {url}: {e}")
+
+    def end(self):
+        self.driver.quit()
+        
 def testing():
     url = "https://www.aljazeera.com/news/2025/8/9/india-says-six-pakistani-aircraft-shot-down-during-kashmir-conflict"
-
-    print("\n--- Testing newspaper3k ---\n")
-    text_3k = get_news_data(url)
-    print(text_3k[:1000] if text_3k else "No text found.")
+    browser = BrowserSim()
+    browser.start()
+    full_text = browser.get_page(url)
+    browser.end()
 
 if __name__ == "__main__":
     testing()

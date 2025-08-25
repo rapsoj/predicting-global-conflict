@@ -5,7 +5,8 @@
             "coup",
             "election",
             "economic crisis",
-            "ethnic tension"
+            "ethnic tension",
+            "natural disaster"
         ],
         "searches" : [
             "[metric] in [country] in [year]"
@@ -65,9 +66,12 @@
             "Kenya": "KE"
         },
         "metrics" : [
+            "war",
             "coup",
             "election",
-            "economic crisis"
+            "economic crisis",
+            "ethnic tension",
+            "natural disaster"
         ],
         "queries" :[
             "[metric] in [country] in [year]"

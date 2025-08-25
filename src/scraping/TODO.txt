@@ -1,18 +1,11 @@
-break up into input and output sections
-better organise outputs
-rename output file
-look at queries and objective surrounding prompts and queries
 QA on LLM outputs and articles
-adjust for full articles
-investigate quality of gnews outputs
+    check wikipedia - databases, election
+    world bank - economic crisis
+    verify with coups
 
-chat with jess
-is election, natural disaster, economic crisis, ethnic tensions or coup
-check wikipedia - databases, election
-world bank - economic crisis
-change up variables
-
-verify with coups
-newspaper3k
-
-started 18:51 15 searches
+ADD ALL COUNTRIES to the IO
+QA with Honduras when code is ready
+Add funcitonality to only capture new data once rename - just limit search
+Add functionality to combine CSVs
+Verify selenium with cloudflare
+Final QA receipt look / feel / information

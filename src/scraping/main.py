@@ -1,15 +1,11 @@
 # LOADING AND IMPORTING LIBRARIES
-from datetime import datetime
-from dateutil import parser
 
 from gnews_fetcher import GNewsFetcher
 import logic_parser as logic
 from news_boy import get_news_data
 from . import utils
 
-import pandas as pd
-
-import os, json, re, csv
+import os, json
 
 print("loading configurations...")
 # LOADING CONFIGURATIONS
@@ -46,44 +42,15 @@ visited_urls = []
 
 print("fetching news articles...")
 # FETCHING URLS
-results = []
-prev_country = None
-total_results = 0
-for search in gnews_searches:
-    if search["country"] != prev_country:
-        news_agent = GNewsFetcher(country=countries[search["country"]], max_results=max_results)
-    prev_country = search["country"]
-    result = news_agent.get_news(search["search"])
-    total_results += len(result)
-    results.append(result)
-    
-print(f"Fetched a whole {total_results} articles...")
+news_agent = GNewsFetcher(country=countries[gnews_searches[0]["country"]], max_results=max_results)
+google_news_articles = news_agent.get_bundle_search(queries=gnews_searches, visited_urls=visited_urls)
+print(f"Fetched a whole {len(google_news_articles)} articles...")
+
 print("generating prompts...")
-
 # GENERATE PROMPTS FOR PARSING AND FILTERING
-def gen_prompts(any_text : str, metrics : list):
-    return any_text.replace("[all metrics]", ", ".join(metrics))
 
-gnews_filter_prompt = gen_prompts(gnews_filter_prompt, metrics)
-news_query_prompt = gen_prompts(news_query_prompt, metrics)
-
-# FILTER
-filtering_agent = logic.TextParser(model="gpt-3.5-turbo")
-if gnews_filter:
-    print("filtering articles...")
-    def filter_results():
-        filtered_articles = []
-        for result in results:
-            for article in result:
-                response = filtering_agent.get_chatgpt_response(
-                    instruction_prompt, 
-                    f"{gnews_filter_prompt.replace('[country]',article['country'])} Title:{article['title']} Description:{article['description']} Published Date:{article['published date']}"
-                    )
-                if response.strip().lower() == "yes":
-                    filtered_articles.append(article)
-        return filtered_articles
-    articles = filter_results()
-    results = [articles] 
+gnews_filter_prompt = utils.generate_instructions(gnews_filter_prompt, metrics)
+news_query_prompt = utils.generate_instructions(news_query_prompt, metrics)
 
 print("parsing articles...")
 parsed_articles = [] # MAKE MORE EFFICIENT
