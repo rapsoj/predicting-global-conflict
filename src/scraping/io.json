@@ -11,7 +11,7 @@
         "searches" : [
             "[metric] in [country] in [year]"
         ],
-        "countries" : {
+        "countries" : { 
             "South Africa" : "ZA",
             "United States" : "US",
             "Russia": "RU",
@@ -30,8 +30,75 @@
             "United Kingdom": "GB",
             "Japan": "JP",
             "Kenya": "KE",
-            "Nigeria": "NG"
+            "Nigeria": "NG",
+
+            "Argentina": "AR",
+            "Australia": "AU",
+            "Bangladesh": "BD",
+            "Canada": "CA",
+            "Colombia": "CO",
+            "Egypt": "EG",
+            "Ethiopia": "ET",
+            "Indonesia": "ID",
+            "Iraq": "IQ",
+            "Israel": "IL",
+            "Malaysia": "MY",
+            "Morocco": "MA",
+            "Netherlands": "NL",
+            "Philippines": "PH",
+            "Poland": "PL",
+            "Saudi Arabia": "SA",
+            "South Korea": "KR",
+            "Sweden": "SE",
+            "Switzerland": "CH",
+            "Thailand": "TH",
+            "United Arab Emirates": "AE",
+            "Venezuela": "VE",
+            "Vietnam": "VN",
+
+            "Afghanistan": "AF",
+            "Algeria": "DZ",
+            "Angola": "AO",
+            "Austria": "AT",
+            "Belgium": "BE",
+            "Bolivia": "BO",
+            "Chile": "CL",
+            "Czech Republic": "CZ",
+            "Denmark": "DK",
+            "Dominican Republic": "DO",
+            "Ecuador": "EC",
+            "Finland": "FI",
+            "Ghana": "GH",
+            "Greece": "GR",
+            "Guatemala": "GT",
+            "Honduras": "HN",
+            "Hungary": "HU",
+            "Jordan": "JO",
+            "Kazakhstan": "KZ",
+            "Kuwait": "KW",
+            "Lebanon": "LB",
+            "Libya": "LY",
+            "Myanmar": "MM",
+            "Nepal": "NP",
+            "New Zealand": "NZ",
+            "Norway": "NO",
+            "Peru": "PE",
+            "Portugal": "PT",
+            "Qatar": "QA",
+            "Romania": "RO",
+            "Serbia": "RS",
+            "Singapore": "SG",
+            "Somalia": "SO",
+            "Sri Lanka": "LK",
+            "Sudan": "SD",
+            "Syria": "SY",
+            "Tunisia": "TN",
+            "Uganda": "UG",
+            "Uruguay": "UY",
+            "Yemen": "YE",
+            "Zimbabwe": "ZW"
         },
+
         "years" : [
             "2024",
             "2023",
@@ -63,7 +130,7 @@
             "[metric] in [country] in [year]"
         ],
         "countries" : {
-            "Kenya": "KE"
+            "Honduras": "HN"
         },
         "metrics" : [
             "war",
@@ -72,9 +139,6 @@
             "economic crisis",
             "ethnic tension",
             "natural disaster"
-        ],
-        "queries" :[
-            "[metric] in [country] in [year]"
         ]
     }
 }

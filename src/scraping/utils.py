@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from dateutil import parser
 import pandas as pd
+import json
 
 def generate_search_queries(google_search_templates : list[str], country_names : list[str], search_metrics : list[str], years : list[str]) -> list[dict]:
     '''
@@ -31,6 +32,21 @@ def display_article_results(articles : list[dict]):
 
 def generate_instructions(any_text : str, metrics : list[str]) -> str:
     return any_text.replace("[all metrics]", ", ".join(metrics))
+
+def save_articles_json(articles, filename="articles.json"):
+    output_dir = os.path.join(os.getcwd(),"testing", "outputs")
+    os.makedirs(output_dir, exist_ok=True)
+    filepath = os.path.join(output_dir, filename)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(articles, f, ensure_ascii=False, indent=2)
+    print(f"Saved {len(articles)} articles to {filepath}")
+
+def load_articles_json(filename="articles.json"):
+    filepath = os.path.join(os.getcwd(), "testing", "outputs", filename)
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 
 def save_to_csv( # TODO
     data: list[list[str]],

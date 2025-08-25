@@ -63,7 +63,7 @@ class BrowserSim:
         self.driver = webdriver.Chrome(options=self.options)
 
     def get_page(self, url):
-        self.start_browser()
+        self.start()
         try:
             self.driver.get(url)
 
