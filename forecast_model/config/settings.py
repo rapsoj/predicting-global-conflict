@@ -29,7 +29,26 @@ predictors = [
     'quarter_2',
     'quarter_3',
     'quarter_4',
-    'importance_weight'
+    'importance_weight',
+    "inflation",
+    "youth_unemployment",
+    "income_inequality",
+    "income_level_code",
+    'christian_holiday_count',
+    'islam_holiday_count',
+    'shia_holiday_count',
+    'hindu_holiday_count',
+    'buddhist_holiday_count',
+    'jewish_holiday_count',
+    'cultural_holiday_count',
+    'nonreligious_holiday_count',
+    'majority_religion',
+    'majority_pct',
+    'minority1_religion',
+    'minority1_pct',
+    'minority2_religion',
+    'minority2_pct',
+    'nonreligpct',
     ]
 
 targets = [

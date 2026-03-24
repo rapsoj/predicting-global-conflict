@@ -3,6 +3,10 @@ import pandas as pd
 import geopandas as gpd
 from utils import data_cleaning, map_admin_regions
 from config import settings
+from utils.features.holidays import add_holiday_features
+from utils.features.worldbank import add_worldbank_features
+from utils.features.religion import add_religion_features
+
 
 def prepare_data_pipeline(clean_data: bool = False):
     """
@@ -20,29 +24,48 @@ def prepare_data_pipeline(clean_data: bool = False):
     df = pd.read_csv("data/raw/1997-01-01-2025-07-03.csv")
     df = df[df['year'] >= 2018].copy()
     df['date'] = pd.to_datetime(df['event_date'], format='%d %B %Y')
-    df['month_year'] = df['date'].dt.to_period('M').astype(str)
+    df['month_year'] = df['date'].dt.to_period('M').dt.to_timestamp()
 
     gdf = gpd.read_file("data/raw/boundaries/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp")
+    
+    if 'country_code' not in df.columns:
+       df['country_code'] = df['country']
+
+# admin1 column naming fix
+    if 'admin1' not in df.columns:
+        if 'admin1_name' in df.columns:
+            df['admin1'] = df['admin1_name']
+        elif 'admin1_region' in df.columns:
+            df['admin1'] = df['admin1_region']
+
     df_neighbours = map_admin_regions.add_admin1_neighbors(df, gdf)
+     
 
     neighbour_data = data_cleaning.summarise_neighbour_events(df_neighbours)
     event_data = data_cleaning.get_monthly_events(df_neighbours)
     subevent_data = data_cleaning.get_monthly_subevents(
-        df_neighbours, ['Excessive force against protesters', 'Agreement']
+       df_neighbours, ['Excessive force against protesters', 'Agreement']
     )
 
     combined = pd.concat([event_data, subevent_data], axis=1).join(neighbour_data, how='left')
     combined = data_cleaning.add_lagged_columns(combined)
     combined = data_cleaning.add_time_trend_features(combined)
     combined = data_cleaning.add_importance_weights(combined)
+    combined = add_worldbank_features(combined, gdf)
+    combined = add_holiday_features(combined, gdf)
+    combined = add_religion_features(combined)
+    
+
 
     model_data = combined[settings.predictors + settings.targets]
 
-    # Save to disk for next time
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     model_data.to_csv(output_path)
 
     return model_data
     
+
+
+
 def filter_admin1_data(df, admin1_region):
     return df.loc[admin1_region]
