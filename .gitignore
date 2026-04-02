@@ -1,3 +1,6 @@
+forecast_model/data/raw/1997-01-01-2025-07-03.csv
+.DS_Store
+
 # Ignoring all .env files for security
 *.env
 **/*.env
@@ -6,3 +9,6 @@ src/scraping/outputs/llm/*
 src/scraping/outputs/csv/*/*
 src/scraping/to-implement.py
 src/scraping/to-do.txt
+.claude/
+forecast_model/data/raw/combined_indicators.csv
+forecast_model/data/raw/master_raw.csv
