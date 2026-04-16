@@ -6,6 +6,7 @@ from utils import data_cleaning, map_admin_regions
 from utils.risk_merge import RiskIndicatorMerger
 from utils.features.holidays import add_holiday_features
 from utils.features.worldbank import add_worldbank_features
+from utils.features.religion import add_religion_features
 from utils.fetch_world_bank_data import WorldBankDataFetcher
 from config import settings
 
@@ -27,6 +28,15 @@ def _build_combined():
     df = df[df['year'] >= 2018].copy()
     df['date'] = pd.to_datetime(df['event_date'], format='%d %B %Y')
     df['month_year'] = df['date'].dt.to_period('M').astype(str)
+
+    # admin1 column naming fix
+    if 'country_code' not in df.columns:
+        df['country_code'] = df['country']
+    if 'admin1' not in df.columns:
+        if 'admin1_name' in df.columns:
+            df['admin1'] = df['admin1_name']
+        elif 'admin1_region' in df.columns:
+            df['admin1'] = df['admin1_region']
 
     gdf = gpd.read_file(_BOUNDARIES)
     df_neighbours = map_admin_regions.add_admin1_neighbors(df, gdf)
@@ -125,23 +135,16 @@ def prepare_enriched_pipeline(
                                 indicators_path=indicators_csv,
                                 metadata_path=metadata_csv)
     df = df.sort_index()
-    # Prior-year shift: raw col → _py col (year Y uses year Y-1's value).
-    # WB values are broadcast yearly so shift(12) lands on the correct prior year.
     raw_to_py = {r: p for r, p in
                  zip(['inflation', 'youth_unemployment', 'income_inequality'],
                      ['inflation_py', 'youth_unemployment_py', 'income_inequality_py'])}
     for raw_col, py_col in raw_to_py.items():
         if raw_col in df.columns:
             shifted = df.groupby(level='matched_admin1_id')[raw_col].shift(12)
-            # Year-specific median imputation (matches feature_engineering_3.ipynb):
-            # missing values get the median for that year across all regions, then
-            # a global median as final fallback for years with no data at all.
             year_key = df.index.get_level_values('month_year').str[:4].astype(int)
             year_medians = shifted.groupby(year_key).transform('median')
             df[py_col] = shifted.fillna(year_medians).fillna(shifted.median())
 
-    # income_level_code is a stable structural attribute (no prior-year shift needed).
-    # Impute territories/unclassified regions with the global median (matches notebook).
     if 'income_level_code' in df.columns:
         median_level = df['income_level_code'].median()
         df['income_level_code'] = df['income_level_code'].fillna(median_level)
@@ -149,15 +152,16 @@ def prepare_enriched_pipeline(
     # ── 3. Holiday features ────────────────────────────────────────────────
     print("  Adding holiday features...")
     df = add_holiday_features(df, gdf, holidays_path=holidays_csv)
-    # Sort so that positional shift(1) below lands on the correct prior month.
     df = df.sort_index()
-    # Lag 1 month — consistent with t-1 design; column names match settings.holiday_features
     for raw_col, lag_col in zip(settings.holiday_raw_cols, settings.holiday_features):
         if raw_col in df.columns:
             df[lag_col] = (
                 df.groupby(level='matched_admin1_id')[raw_col]
                 .shift(1).fillna(0).astype(int)
             )
+
+    print("  Adding religion features...")
+    df = add_religion_features(df)
 
     # ── 4. Engineered features ─────────────────────────────────────────────
     print("  Building engineered features...")
