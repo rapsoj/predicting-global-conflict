@@ -201,7 +201,7 @@ Regions split into tiers per target (quiet <1, moderate 1–10, active >10 mean 
 | Persistence | Y(t) = Y(t−1) | 0.902 | 1.119 | 0.771 | 0.931 | −60.3% |
 | **CAST+** | **Two-Stage CatBoost** | **1.384** | **2.546** | **0.836** | **1.589** | **−32.2%** |
 
-**Mean MAE improvement (CAST+ vs CAST): 24.6% — 20% target ✓ ACHIEVED**
+**Mean MAE improvement (CAST+ vs CAST): 24.6% — 20% target  ACHIEVED**
 
 ---
 
