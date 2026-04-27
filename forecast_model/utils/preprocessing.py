@@ -7,6 +7,7 @@ from utils.risk_merge import RiskIndicatorMerger
 from utils.features.holidays import add_holiday_features
 from utils.features.worldbank import add_worldbank_features
 from utils.features.religion import add_religion_features
+from utils.features.improved_features import add_cyclic_time_features, add_country_level_features
 from utils.fetch_world_bank_data import WorldBankDataFetcher
 from config import settings
 
@@ -63,7 +64,7 @@ def _build_combined():
 
     combined = pd.concat([event_data, subevent_data], axis=1).join(neighbour_data, how='left')
     combined = data_cleaning.add_lagged_columns(combined)
-    combined = data_cleaning.add_time_trend_features(combined)
+    combined = add_cyclic_time_features(combined)
     combined = data_cleaning.add_importance_weights(combined)
     return combined, gdf
 
@@ -149,21 +150,20 @@ def prepare_enriched_pipeline(
         median_level = df['income_level_code'].median()
         df['income_level_code'] = df['income_level_code'].fillna(median_level)
 
-    # ── 3. Holiday features ────────────────────────────────────────────────
+    # ── 3. Holiday features (current month, no lag) ────────────────────────
+    # Holidays are deterministic calendar facts known in advance — no lag needed.
     print("  Adding holiday features...")
-    df = add_holiday_features(df, gdf, holidays_path=holidays_csv)
+    df = add_holiday_features(df, gdf)
     df = df.sort_index()
-    for raw_col, lag_col in zip(settings.holiday_raw_cols, settings.holiday_features):
-        if raw_col in df.columns:
-            df[lag_col] = (
-                df.groupby(level='matched_admin1_id')[raw_col]
-                .shift(1).fillna(0).astype(int)
-            )
 
     print("  Adding religion features...")
     df = add_religion_features(df)
 
-    # ── 4. Engineered features ─────────────────────────────────────────────
+    # ── 4. Country-level hierarchy features ───────────────────────────────
+    print("  Adding country-level hierarchy features...")
+    df = add_country_level_features(df)
+
+    # ── 5. Engineered features ─────────────────────────────────────────────
     print("  Building engineered features...")
     df = data_cleaning.build_enhanced_features(df.reset_index())
 

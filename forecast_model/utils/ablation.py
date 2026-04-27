@@ -23,6 +23,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from config import settings
 from utils.evaluators import find_top_regions, evaluate_model
 from utils.visualization import plot_ablation_heatmap
+from utils.features.improved_features import COUNTRY_FEATURES
 
 
 # ── Model definitions (mirrors model_comparison_4.ipynb) ──────────────────────
@@ -70,12 +71,15 @@ def build_feature_sets(df: pd.DataFrame) -> dict:
         if f in df.columns
     ]
 
+    country_feats = [f for f in COUNTRY_FEATURES if f in df.columns]
+
     return {
         "Baseline":    settings.predictors,
         "+Risk":       settings.predictors + risk_features,
         "+Macro":      settings.predictors + risk_features + settings.macro_features,
         "+Holidays":   settings.predictors + risk_features + settings.macro_features + settings.holiday_features,
-        "+Engineered": settings.predictors + risk_features + settings.macro_features + settings.holiday_features + engineered_features,
+        "+Country":    settings.predictors + risk_features + settings.macro_features + settings.holiday_features + country_feats,
+        "+Engineered": settings.predictors + risk_features + settings.macro_features + settings.holiday_features + country_feats + engineered_features,
     }
 
 

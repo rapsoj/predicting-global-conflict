@@ -223,22 +223,28 @@ def build_holiday_features():
     holiday_full["year"] = holiday_full["date"].dt.year
     holiday_full["month"] = holiday_full["date"].dt.month
 
+    count_cols = [c for c in holiday_full.columns if "holiday_count" in c]
+    holiday_full['holiday_count_month'] = holiday_full[count_cols].sum(axis=1)
+    holiday_full['is_holiday_month'] = (holiday_full['holiday_count_month'] > 0).astype(int)
+
     return holiday_full
 
 def add_holiday_features(combined, gdf=None):
-    
+
     holiday_full = build_holiday_features()
 
     count_cols = [c for c in holiday_full.columns if "holiday_count" in c]
+    flag_cols  = [c for c in ["is_holiday_month"] if c in holiday_full.columns]
+    merge_cols = count_cols + flag_cols
 
     combined_reset = combined.reset_index()
     rename_map = {}
-    
+
     if "iso3" not in combined_reset.columns:
         if "matched_admin1_id" in combined_reset.columns:
-           combined_reset["iso3"] = combined_reset["matched_admin1_id"].str.split(" - ").str[0].str.strip().str.upper()   
+           combined_reset["iso3"] = combined_reset["matched_admin1_id"].str.split(" - ").str[0].str.strip().str.upper()
         else:
-            raise KeyError(f"Cannot find iso3 column. Available: {combined_reset.columns.tolist()}")     
+            raise KeyError(f"Cannot find iso3 column. Available: {combined_reset.columns.tolist()}")
 
     if "date" not in combined_reset.columns:
         if "month_year" in combined_reset.columns:
@@ -255,12 +261,12 @@ def add_holiday_features(combined, gdf=None):
     holiday_full["date"] = holiday_full["date"].dt.to_period("M").dt.to_timestamp()
 
     combined_reset = combined_reset.merge(
-        holiday_full[["iso3", "date"] + count_cols],
+        holiday_full[["iso3", "date"] + merge_cols],
         on=["iso3", "date"],
         how="left"
     )
 
-    combined_reset[count_cols] = combined_reset[count_cols].fillna(0)
+    combined_reset[merge_cols] = combined_reset[merge_cols].fillna(0)
     reverse_map = {v: k for k, v in rename_map.items()}
     combined_reset = combined_reset.rename(columns=reverse_map)
 
