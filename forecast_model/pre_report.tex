@@ -1,0 +1,1139 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{soul}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\geometry{margin=2.5cm}
+\onehalfspacing
+
+% Helper for Giray placeholders
+\newcommand{\giray}[1]{\textbf{[GIRAY: #1]}}
+
+\title{\textbf{CAST+: Augmenting the ACLED Conflict Alert System }}
+\author{Rosa Daneshmandnia \and Giray \"{U}nl\"{u}}
+\date{May 2026}
+
+\begin{document}
+
+\maketitle
+
+% ============================================================
+\begin{abstract}
+The ACLED Conflict Alert System (CAST) is a global prediction tool that
+forecasts monthly political violence at the subnational level. While
+CAST provides strong baseline forecasts, it tends to extend recent
+patterns forward, limiting its ability to detect meaningful shifts in
+conflict dynamics. This report presents CAST+, an augmented system
+developed in collaboration with ACLED and Algorithmic Governance over
+six weeks in early 2026. CAST+ makes two complementary contributions.
+First, it expands the input feature space with new open-source data
+signals including news-scraped risk indicators, World Bank macroeconomic
+variables, public holiday calendars, and religious composition data,
+alongside engineered interaction features. Second, it introduces a
+two-stage CatBoost architecture that directly addresses the zero-inflated
+structure of monthly conflict change, predicting whether change will
+occur before estimating its magnitude. Evaluated on a six-month
+chronological holdout across 2,205 global Admin-1 regions, the best
+CAST+ configuration achieves a mean absolute error of 1.589, representing
+a 24.6\% improvement over the CAST baseline of 2.344, surpassing the
+project target of 20\%. On the top-10 most active regions, CAST+ achieves
+a 23.1\% improvement over the baseline, outperforming all alternative
+configurations tested. A directional accuracy of 79 to 82\% across
+targets confirms the model is learning meaningful escalation patterns
+rather than simply copying recent conflict levels. All experiments are
+fully reproducible via the project repository at
+\url{https://github.com/rapsoj/predicting-global-conflict}.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introduction}
+
+Political violence, encompassing armed conflict, targeted attacks on
+civilians, and the use of explosive and remote weaponry, remains one
+of the most consequential and difficult-to-anticipate threats to human
+security globally. The ability to forecast where and when violence is
+likely to escalate is of significant value to policymakers, humanitarian
+organisations, and conflict researchers, who depend on early warning
+signals to allocate resources, plan responses, and where possible,
+prevent harm before it occurs.
+
+The Armed Conflict Location and Event Data Project (ACLED) is the
+leading global repository of disaggregated conflict data, recording
+political violence and protest events across every country in the world
+with no minimum fatality threshold for inclusion. Built on this
+foundation, ACLED's Conflict Alert System (CAST) is a global prediction
+tool that forecasts the number of political violence events expected in
+the coming six months, at both the country level and the first
+administrative division (Admin-1) level. CAST disaggregates its forecasts
+across three event types, namely battles, explosions and remote violence,
+and violence against civilians, providing users with granular, actionable
+predictions rather than a single aggregate conflict index.
+
+Despite its scope and utility, CAST exhibits a characteristic limitation
+common to many conflict forecasting systems: it behaves largely as a
+persistence model, extrapolating recent patterns forward in time. This
+design produces reliable forecasts in stable conflict environments but
+systematically underperforms in situations of meaningful change, precisely
+the escalation dynamics, emerging hotspots, and shifting conflict
+trajectories that early warning systems are most needed to detect.
+
+This project, conducted over approximately six weeks in early 2026, aims
+to address this limitation through two complementary contributions. First,
+the feature space is expanded by integrating new open-source data signals
+including news-scraped risk indicators, World Bank macroeconomic
+indicators, public holiday calendars, religious composition data, and a
+set of engineered interaction features. Second, a systematic model
+benchmarking study is conducted across multiple architectures and an
+extended set of engineered features, identifying the configurations that
+most improve forecast accuracy and change detection relative to the
+repository baseline.
+
+The result is CAST+: an augmented forecasting pipeline that retains the
+interpretability and global coverage of the original system while
+improving its sensitivity to conflict dynamics that deviate from
+established patterns.
+
+
+% ============================================================
+\section{Background and Related Work}
+
+\subsection{The ACLED Conflict Alert System}
+
+% FLAG: After Kai meeting, confirm whether Section 2.1 should describe
+% the repository baseline (RF) or the current live CAST (LGBM-Tweedie).
+% Currently framed around the repository baseline used in this project.
+
+CAST structures its predictions at the Admin-1 month level, training
+separate models for each country on data from 2018 onward. For each
+country and each of the three target event types, the repository baseline
+fits and evaluates four candidate model configurations, namely a random
+forest and an XGBoost model, each run against a simple and a complex
+predictor list, using four-fold time-series cross-validation with a
+six-month holdout window. The best-performing configuration for each
+country is selected and retrained on the full available data to generate
+forecasts for the following six months.
+
+The predictor set used by CAST is derived primarily from ACLED data
+itself: lagged event counts from the previous month, spillover from
+neighbouring administrative divisions, actor interaction types, fatality
+rates, and strategic development events such as peace agreements. This is
+supplemented by external sources including population estimates from
+WorldPop and infant mortality rates from the Center for International
+Earth Science Information Network (CIESIN) as a proxy for economic
+development. Forecasts are produced at the Admin-1 level and aggregated
+upward to the country and global level.
+
+\subsection{Limitations of the Existing Approach}
+
+The persistence-like behaviour of the baseline follows naturally from its
+feature construction: when the strongest predictors are lagged event
+counts from the previous month, the model tends to forecast next month's
+violence as a function of last month's. This is a well-documented
+challenge in conflict forecasting. Models trained on historical conflict
+data tend to be well-calibrated for ongoing, stable conflicts but
+struggle with onset and escalation events, which are low-frequency,
+high-impact shifts that are underrepresented in the training distribution.
+
+The CAST methodology acknowledges this asymmetry directly, noting that
+forecast accuracy is not consistent across all countries or administrative
+divisions, and that a stable conflict with an established pattern of
+events produces more accurate forecasts than a new, highly volatile
+conflict with no established pattern. Improving performance on the latter
+category is the central motivation for CAST+.
+
+Additionally, 86 to 92\% of monthly delta values across all Admin-1
+regions are zero, meaning conflict levels do not change from one month
+to the next. A single-stage regression model wastes capacity predicting
+these zero-change months rather than concentrating on the months where
+change actually occurs.
+
+\subsection{Project Objectives}
+
+This project sets out to improve the model's ability to detect meaningful
+changes in conflict risk over a six-month horizon, with a target of 20\%
+improvement over the baseline. Concretely, this involves three objectives:
+(1) expanding the input feature space with new data sources that carry
+signal about changing conflict conditions; (2) engineering features that
+better capture temporal dynamics and structural vulnerability; and (3)
+identifying model architectures that are better suited to the
+zero-inflated, count-based nature of the prediction task than the
+random forest baseline.
+
+
+% ============================================================
+\section{Data and Datasets}
+
+The CAST+ pipeline integrates five data sources. The primary source is
+the ACLED event-level dataset. Four additional open-source datasets were
+integrated to enrich the feature space.
+
+\subsection{ACLED Event Data}
+
+The primary data source is the ACLED raw event file, covering
+1 January 1997 to 20 June 2025, comprising 2,619,146 raw events. The
+pipeline filters to 2018 onward (2,241,762 events, 85.6\% of the raw
+file) before monthly aggregation, consistent with the CAST methodology.
+Pre-2018 data is excluded due to inconsistent global coverage in ACLED's
+historical collection. After monthly aggregation, the dataset spans
+approximately 278,821 region-month rows across approximately 3,097 global
+Admin-1 regions. Admin-1 region boundaries are derived from the Natural
+Earth Admin-1 shapefiles.
+
+\subsection{News-Scraped Risk Indicators}
+
+News coverage of seven conflict-relevant risk categories was collected
+via a four-stage pipeline implemented in \texttt{src/scraping/}.
+The \texttt{GNewsFetcher} module queries the Google News RSS feed for
+each country--metric--year combination using per-metric keyword
+templates (e.g.\ ``crop failure OR harvest crisis'' for crop failure).
+Full article text is retrieved with a headless Chromium browser
+(Playwright, up to 75 concurrent tabs). A fuzzy keyword pre-filter
+removes off-topic articles; surviving articles are sent to an OpenAI
+language model that assigns each to one of the seven categories and
+records the country, metric, and month-year. Results are aggregated to
+country-month counts in \texttt{data/raw/master\_raw.csv}: 26,530
+records covering 236 countries from January 2018 to December 2024.
+The seven categories are: contested election, crop failure, economic
+concern, ethnic tension, military coup, natural disaster, and political
+assassination. Coverage is sparse by design---between 5 and 21\% of
+region-months have a non-zero value for any given indicator.
+
+\subsection{World Bank Macroeconomic Indicators}
+
+Three macroeconomic indicators were retrieved via the World Bank API
+and integrated as country-level annual features:
+
+\begin{itemize}
+    \item \textbf{Inflation} (CPI annual percentage change,
+          indicator FP.CPI.TOTL.ZG): captures economic shock conditions.
+          Analysis at the country-year level shows that inflation does not
+          exhibit a strong linear relationship with conflict counts, but
+          high inflation years (top quintile) are associated with
+          substantially higher violence, particularly in low income
+          countries. Inflation functions as a dynamic accelerator of
+          conflict in economically vulnerable contexts.
+    \item \textbf{Youth unemployment} (SL.UEM.NEET.ZS): captures
+          mobilisation capacity. Moderate positive correlation with
+          conflict totals (0.20 to 0.33) suggests youth unemployment
+          contributes to the pool of potential recruits into armed groups.
+    \item \textbf{Income inequality} (Gini coefficient,
+          SI.POV.GINI): the strongest structural signal in this dataset.
+          Country-year analysis reveals a threshold-like relationship:
+          high inequality countries exhibit dramatically higher violence
+          against civilians (mean 535 events per year) compared to low
+          inequality countries (mean 12 events per year). This separation
+          persists after log transformation and within World Bank income
+          tiers, indicating inequality is not merely a proxy for
+          development level.
+\end{itemize}
+
+In addition, \textbf{income level classification} (Low, Lower-middle,
+Upper-middle, High income) was retrieved from the World Bank country
+metadata API and encoded as an ordinal variable (LIC=1 through HIC=4),
+providing a structural institutional buffer signal.
+
+\textbf{Leakage prevention:} World Bank data is published with a 12 to
+18 month lag. All three continuous indicators are shifted by one prior
+year before joining to the model dataset. Income level is a structural
+classification and requires no lag. Sparse indicators such as the Gini
+coefficient are filled using within-country backward and forward fill
+before broadcasting annual values to all 12 months of each year.
+
+\subsection{Public Holiday Calendar}
+
+A public holiday dataset covering 233 countries was integrated, comprising
+89,217 national holiday records after cleaning. Holiday names were
+standardised across 34 spelling variants and tagged by religious
+tradition, producing eight monthly count features per country:
+\texttt{christian\_holiday\_count}, 
+\texttt{islam\_holiday\_count},
+\texttt{shia\_holiday\_count}, \texttt{hindu\_holiday\_count},
+\texttt{buddhist\_holiday\_count}, \texttt{jewish\_holiday\_count},
+\texttt{cultural\_holiday\_count}, and
+\texttt{nonreligious\_holiday\_count}.
+
+Unlike other features in the pipeline, holidays are deterministic
+calendar facts known in advance. They are therefore used at the
+current month without a lag, which introduces no data leakage while
+preserving the full information content.
+
+\subsection{Religious Composition Data}
+
+Religious composition data was sourced from the World Religion Project
+(WRP) national dataset, joined to ISO3 country codes via the Correlates
+of War (COW) country code mapping. The 2010 snapshot was used as a
+static structural baseline capturing the top three religious denominations
+by population share for each country:
+\texttt{majority\_religion}, \texttt{majority\_pct},
+\texttt{minority1\_religion}, \texttt{minority1\_pct},
+\texttt{minority2\_religion}, \texttt{minority2\_pct}, and
+\texttt{nonreligpct}.
+
+The motivation for including religious composition is that holidays only
+become meaningful conflict signals when considered in their religious
+context. An Islamic holiday in a country with a Muslim majority carries
+different social significance than the same date in a country where
+Muslims are a small minority. This dataset enables the holiday features
+to be contextualised by the religious structure of each country.
+
+\subsection{Data Merging and Integration}
+
+All five datasets are joined to a single Admin-1 monthly panel indexed
+by (\texttt{matched\_admin1\_id}, \texttt{month\_year}). Country-level
+features (World Bank, religion, risk indicators, holidays) are broadcast
+to all Admin-1 regions within the same country via an ISO3 country code
+extracted from the \texttt{matched\_admin1\_id} prefix. Risk indicator counts are matched to the panel on (ISO3 country code,
+month-year) and broadcast to all Admin-1 regions within that country,
+then lagged one month ($t-1$) to prevent data leakage.
+
+The full merged and engineered dataset spans 289,890 rows across
+3,221 Admin-1 regions and 78 feature columns.
+
+
+% ============================================================
+\section{Feature Engineering}
+
+Features are organised into cumulative layers. The first two layers
+constitute the CAST baseline predictor set. Subsequent layers represent
+enrichments developed in this project.
+
+\subsection{Layer 1: Autoregressive Lag Features (ACLED)}
+
+One-month lagged counts for all 8 ACLED event types: Battles, Explosions
+and Remote violence, Protests, Riots, Strategic developments, Violence
+against civilians, Excessive force against protesters, and Agreement.
+Additionally, lag-1 of event counts summed over all bordering Admin-1
+regions is included as a spatial spillover signal. Neighbour adjacency
+is derived from the Natural Earth Admin-1 shapefile by polygon
+intersection. All lags are computed per region to prevent cross-region
+leakage.
+
+\subsection{Layer 2: Temporal Features}
+
+A set of time trend variables capturing seasonal and trend components:
+a linear month trend since January 2018, year, month dummies, and quarter
+dummies. These features capture unobserved time-varying patterns including
+seasonality and long-run conflict trends.
+
+\subsection{Layer 3: News-Scraped Risk Indicators}
+
+Seven country-month risk indicators derived from the pipeline described
+in Section~3.2 are included as features:
+\texttt{risk\_contested\_election},
+\texttt{risk\_crop\_failure},
+\texttt{risk\_economic\_concern},
+\texttt{risk\_ethnic\_tension},
+\texttt{risk\_military\_coup},
+\texttt{risk\_natural\_disaster}, and
+\texttt{risk\_political\_assassination}.
+Each records the monthly article count for that risk category,
+matched via ISO3 country code and broadcast to all Admin-1 regions
+within that country. A one-month lag ($t-1$) is applied to prevent
+data leakage. As shown in Table~\ref{tab:ablation_features}, these
+features add noise in practice and are candidates for removal in a
+production pipeline.
+
+\subsection{Layer 4: World Bank Macroeconomic Features}
+
+The four World Bank features (inflation, youth unemployment, income
+inequality, income level code) described in Section 3.3 are added as
+direct inputs. Prior-year shift is applied to the three continuous
+indicators to prevent data leakage, as described above.
+
+\subsection{Layer 5: Engineered World Bank Features}
+
+Beyond the raw World Bank indicators, ten derived features were
+constructed to capture non-linear interactions and threshold effects
+identified in the data analysis:
+
+\begin{itemize}
+    \item \textbf{Structural vulnerability}: income inequality multiplied
+          by youth unemployment, representing the combination of
+          chronic grievance and a mobilisable population.
+    \item \textbf{Inflation shock}: binary flag for top-decile inflation
+          years, capturing the non-linear shock threshold identified
+          in the country-year analysis.
+    \item \textbf{Shock vulnerability}: inflation shock multiplied by
+          structural vulnerability, combining the acute shock with the
+          underlying structural condition.
+    \item \textbf{Capacity adjusted risk}: structural vulnerability
+          divided by income level, representing the institutional
+          buffering effect of higher income on instability.
+    \item \textbf{Inflation change}: first difference of lagged
+          inflation, capturing acceleration rather than level.
+    \item \textbf{High inequality flag}: binary flag for top-quartile
+          inequality, capturing the threshold effect observed in the
+          country-year analysis.
+    \item \textbf{Inflation shock in poor countries}: interaction of
+          inflation shock and low income flag, isolating the most
+          vulnerable context.
+    \item \textbf{Conflict momentum}: sum of Battles and Violence
+          against civilians plus their neighbour aggregates, capturing
+          overall conflict pressure.
+    \item \textbf{Violence escalation}: ratio of violent events
+          (Battles plus Violence against civilians) to non-violent
+          activity (Protests plus Riots plus 1), capturing the
+          shift from political mobilisation to armed violence.
+    \item \textbf{Macro conflict pressure}: structural vulnerability
+          multiplied by conflict momentum, combining the structural
+          enabling condition with current conflict intensity.
+\end{itemize}
+
+\subsection{Layer 6: Holiday Features}
+
+The eight religion-specific holiday count columns described in Section
+3.4 are added as current-month features. No lag is applied, as holidays
+are known calendar facts.
+
+\subsection{Layer 7: Holiday and Religion Interaction Features}
+
+To make holiday features meaningful in context, three layers of
+holiday-religion interaction features were constructed:
+
+\begin{itemize}
+    \item \textbf{Relevance-weighted holiday counts}: each holiday type
+          is weighted by the corresponding religion's population share
+          in that country. For example, Islam holiday count is multiplied
+          by the majority population share when the majority religion is
+          Islam. This produces \texttt{weighted\_holidays\_majority},
+          \texttt{weighted\_holidays\_minority1}, and
+          \texttt{weighted\_holidays\_minority2}.
+    \item \textbf{Minority tension signal}: a minority religion has a
+          holiday but is not the dominant group. This is a proxy for
+          potential inter-group mobilisation or friction:
+          \texttt{minority\_tension\_minority1},
+          \texttt{minority\_tension\_minority2}, and
+          \texttt{minority\_tension\_total}.
+    \item \textbf{Total religious mobilisation}: composite sum of all
+          weighted holiday signals across majority and minority groups.
+\end{itemize}
+
+All seven interaction features are lagged by one month (t-1) to maintain
+consistency with the pipeline lag policy for dynamic features.
+
+\subsection{Layer 8: Country-Level Hierarchy Features}
+
+Four leave-one-out (LOO) country aggregate features provide a
+national-context signal without leaking the focal region's own
+activity: \texttt{country\_battles\_excl~$(t-1)$},
+\texttt{country\_remote\_excl~$(t-1)$},
+\texttt{country\_vac\_excl~$(t-1)$}, and
+\texttt{country\_total\_excl~$(t-1)$}. Each is the sum of the
+corresponding conflict type across all Admin-1 regions in the same
+country, excluding the focal region. The LOO exclusion prevents
+multicollinearity with the Layer~1 autoregressive features; the
+$t-1$ lag prevents leakage since the current-month country total
+contains the focal region's own current-month count.
+
+In the LGBM-Tweedie V2 ablation, the +Country tier delivers the
+single largest improvement: $-4.54$ MAE ($-7.9\%$), more than three
+times the combined contribution of all other enrichment layers.
+This benefit does not transfer to the two-stage CatBoost framework
+($<1\%$ gain), where the Stage~1 onset classifier already captures
+national-context information from the data directly.
+
+\subsection{Layer 9: Engineered Cross-Variable Features}
+
+Nine cross-variable features were constructed from the Layer~1
+lag-1 counts: lag-2 values for each of the three targets (enabling
+implicit slope computation); an \texttt{organized\_violence~$(t-1)$}
+aggregate (Battles + Remote + VaC); a binary \texttt{is\_active~$(t-1)$}
+zero-inflation flag; a \texttt{battles\_x\_remote~$(t-1)$}
+co-escalation interaction term; and three-month rolling averages for
+each target. A further nine trajectory features (first-difference
+slope, second-difference acceleration, and neighbour slope per target)
+provide a marginal additional improvement of $-0.25$ MAE when added
+to the V2 stack.
+
+\subsection{Feature Ablation Results}
+
+A feature ablation study was conducted on 100 regions to measure the
+marginal contribution of each feature group to the two-stage CatBoost
+model. The results are summarised in Table~\ref{tab:ablation_features}.
+
+\begin{table}[h]
+\centering
+\caption{Feature ablation results on 100 regions. Negative percentage
+indicates the removed group improves MAE (adds noise). Positive
+indicates the group contributes positively.}
+\label{tab:ablation_features}
+\begin{tabular}{lrrrl}
+\toprule
+Removed group & Battles & Remote Violence & VAC & Conclusion \\
+\midrule
+No Religion    & 0.0\%   & 0.0\%   & 0.0\%  & No contribution \\
+No Holidays    & -2.4\%  & 0.0\%   & +1.4\% & Mixed, marginal \\
+No World Bank  & -5.1\%  & +0.7\%  & +0.5\% & Slight noise for Battles \\
+No Risk        & -8.4\%  & -2.8\%  & -3.8\% & Adds noise \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key findings from the ablation are as follows. Religion features make no
+measurable contribution to the model. Holiday features have a marginal
+mixed effect, helping VAC slightly while adding minor noise for Battles.
+World Bank features add slight noise for Battles but provide marginal
+signal for Remote violence and VAC. Risk features add noise across all
+three targets, with removing them improving MAE for every target. Despite
+being theoretically meaningful (crop failure, ethnic tension, contested
+elections), risk features do not help the model in practice and are
+candidates for removal in a production pipeline.
+
+The model is primarily driven by recent conflict history. Stage 2
+(magnitude prediction) is dominated by \texttt{violence\_escalation}
+(importance 19.5) and conflict lags. Stage 1 (change classifier) shows
+a more distributed importance profile, with \texttt{linear\_month\_trend},
+\texttt{conflict\_momentum}, and \texttt{violence\_escalation} leading,
+but risk features, economic indicators, and religious mobilisation all
+contributing meaningfully to detecting whether change will occur.
+
+
+% ============================================================
+\section{Methodology}
+
+\subsection{Problem Formulation}
+
+The forecasting task is defined at the Admin-1 region level as a monthly
+prediction of three target event counts: Battles, Explosions and Remote
+violence, and Violence against civilians. Each target is treated as an
+independent regression problem.
+
+A key design decision in CAST+ is the \textbf{delta formulation}: instead
+of predicting raw event counts $Y(t)$, the model predicts the
+month-to-month change $\Delta Y = Y(t) - Y(t-1)$. Final count predictions
+are recovered at inference via:
+\[
+    \hat{Y}(t) = Y(t-1) + \hat{\Delta Y}
+\]
+
+This formulation is motivated by the structure of the data: 86 to 92\%
+of monthly delta values are zero, meaning conflict levels do not change
+from one month to the next. Predicting change is structurally simpler
+because the model only needs to explain deviations from the current
+state rather than reconstruct absolute levels. It also directly aligns
+the model's objective with the project's stated goal of change detection.
+
+\subsection{Evaluation Design}
+
+\textbf{Primary evaluation:} All 2,205 valid Admin-1 regions globally,
+using a six-month chronological holdout. Regions with fewer than 12
+months of data or no variation in delta targets are excluded. This
+evaluation is the primary reported result because CAST is a global
+forecasting tool and should be evaluated on a globally representative
+population.
+
+\textbf{Secondary evaluation:} The top-10 most active regions by total
+event count during the holdout period, for direct comparison with the
+alternative ablation experiments. These regions are: UKR-Donetsk,
+UKR-Sumy, RUS-Belgorod, UKR-Kherson, PSX-Gaza, UKR-Kharkiv,
+UKR-Zaporizhzhia, RUS-Kursk, UKR-Chernihiv, and PSX-West Bank.
+
+\textbf{Train-test split:} Strictly chronological. Training data uses
+all months up to $T-6$. Test data uses the last 6 months. No shuffling
+is applied.
+
+\textbf{Primary metric:} Mean Absolute Error (MAE) at the count level.
+Delta predictions are converted back to counts before computing MAE,
+ensuring fair comparison with the CAST baseline which predicts raw counts.
+
+\textbf{Secondary metric:} Directional accuracy, measuring whether the
+model correctly predicts the direction of change (escalating, stable, or
+de-escalating). This metric is more meaningful for an early warning tool
+than raw MAE, as it evaluates whether the model correctly signals the
+onset of escalation rather than its exact magnitude.
+
+\textbf{Persistence baseline:} The naive forecast $\hat{Y}(t) = Y(t-1)$
+requires no training. For the delta formulation this is equivalent to
+predicting $\hat{\Delta Y} = 0$ for every month. Persistence is a strong
+benchmark because of high autocorrelation in conflict data: in always-active
+high-conflict regions it is near-unbeatable on MAE alone. The CAST+
+evaluation reports performance against both the RF baseline and the
+persistence baseline.
+
+\subsection{CAST+ Model: Two-Stage CatBoost}
+
+The CAST+ model replaces single-stage regression with a two-stage
+pipeline specifically designed for the zero-inflated delta distribution.
+
+\textbf{Stage 1 (Classifier):} A \texttt{CatBoostClassifier} predicts
+whether any change will occur in month $t$, that is whether
+$\Delta Y \neq 0$. It is trained on the full training set with binary
+target $\mathbf{1}[\Delta Y \neq 0]$. The change threshold is set at 0.50.
+
+\textbf{Stage 2 (Regressor):} A \texttt{CatBoostRegressor} predicts the
+signed magnitude of change, trained exclusively on nonzero-delta months.
+This forces the regressor to specialise on the hard problem of estimating
+how much conflict changes, rather than wasting capacity learning to
+predict zero.
+
+\textbf{Combined prediction:}
+\[
+    \hat{\Delta Y} = \text{Stage1\_flag} \times \text{Stage2\_magnitude}
+\]
+
+When Stage 1 predicts no change, the combined prediction is zero. When
+Stage 1 predicts change, the combined prediction is the Stage 2 magnitude.
+
+\textbf{Hyperparameters:} Both stages use 300 iterations, learning rate
+0.05, depth 4, random seed 42. CatBoost's native categorical feature
+handling is used for religion columns and income level code, with raw NaN
+passthrough (filling NaN with zero was tested and found inferior).
+
+\textbf{Per-target lag strategy:} The lag structure differs by target
+based on empirical results from diagnostic experiments. Battles uses
+t-1 lags only, as it is the most volatile target and extended lags
+introduce noise. Remote violence and Violence against civilians use
+t-1, t-6, and t-12 lags, as they benefit from seasonal signals without
+the noise penalty observed for Battles.
+
+\textbf{Sample weighting:} Exponential recency weights are applied during
+training, down-weighting older observations to account for structural
+changes in conflict dynamics over time.
+
+\subsection{Alternative Model: LGBM-Tweedie with Country Hierarchy}
+
+As a complementary model stream, a LightGBM regressor with a Tweedie
+objective ($p = 1.5$) was evaluated alongside a systematic feature
+ablation study. The Tweedie distribution models a compound
+Poisson-Gamma process suited to non-negative, zero-inflated, and
+overdispersed conflict counts---a better fit than Poisson (which
+assumes mean equals variance) or squared-error objectives (which
+penalise large counts symmetrically). Hyperparameters:
+$n_\text{estimators} = 200$, learning rate $0.05$,
+\texttt{num\_leaves} $= 31$, $\alpha = 0.1$, $\lambda = 1.0$.
+Exponential recency weights ($w = \exp(-0.05 \times \text{months
+since latest})$) are applied during training.
+
+The ablation study evaluated five model families (Random Forest,
+LightGBM-Poisson, LightGBM-Tweedie, XGBoost, Gradient Boosted
+Regression) across six cumulative feature tiers (Baseline, +Risk,
++Macro, +Holidays, +Country, +Engineered) on the ten most
+historically active conflict regions and three regression targets,
+yielding 900 evaluations (V2). The defining result is a
+discontinuous $-4.54$ MAE ($-7.9\%$) improvement from the +Country
+(leave-one-out hierarchy) tier for LGBM-Tweedie---the single largest
+gain across all tiers and model families. Full ablation results are
+presented in Section~6.4.
+
+
+% ============================================================
+\section{Results}
+
+\subsection{Reference Points}
+
+Before presenting CAST+ results, two reference points are established.
+
+The \textbf{CAST baseline} is a Random Forest trained on ACLED-only
+features (29 predictors) without any enrichment. This is the starting
+point for all comparisons. On the global evaluation (2,205 regions),
+the CAST baseline achieves an overall MAE of 2.344. On the top-10 active
+regions, it achieves an overall MAE of 67.968.
+
+The \textbf{persistence baseline} predicts no change each month
+($\hat{\Delta Y} = 0$). On the global evaluation, persistence achieves
+an overall MAE of 0.931. This is lower than the CAST baseline because
+86 to 92\% of months genuinely have zero change, so predicting zero is
+often correct on MAE. However, persistence by definition achieves zero
+directional accuracy for escalating and de-escalating months.
+
+\subsection{CAST+ Global Results (Primary)}
+
+Table~\ref{tab:final_global} presents the primary evaluation of CAST+
+against the CAST baseline across all 2,205 valid Admin-1 regions.
+
+\begin{table}[h]
+\centering
+\caption{Final comparison: CAST baseline vs CAST+ on global evaluation
+(2,205 regions, 6-month holdout).}
+\label{tab:final_global}
+\begin{tabular}{lrrrrrr}
+\toprule
+Target & CAST MAE & CAST+ MAE & Improvement & CAST MAPE & CAST+ MAPE & Dir. Acc. \\
+\midrule
+Battles            & 1.782 & 1.384 & +22.3\% & 96.3\%  & 96.1\%  & 78.9\% \\
+Remote Violence    & 4.319 & 2.546 & +41.0\% & 125.3\% & 93.1\%  & 81.6\% \\
+VAC                & 0.932 & 0.836 & +10.3\% & 79.1\%  & 79.3\%  & 79.0\% \\
+\midrule
+\textbf{Overall}   & \textbf{2.344} & \textbf{1.589} & \textbf{+24.6\%} & & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CAST+ achieves a mean MAE improvement of 24.6\% over the CAST baseline,
+surpassing the project target of 20\%. The largest gain is for Remote
+violence (+41.0\%), where the delta formulation and two-stage
+architecture most effectively separate the change signal from the
+persistent zero-heavy baseline. Directional accuracy of 79 to 82\%
+across all three targets confirms the model is learning meaningful
+directional patterns rather than simply copying recent conflict levels.
+
+The overall progression from baseline to CAST+ is summarised in
+Table~\ref{tab:progression}.
+
+\begin{table}[h]
+\centering
+\caption{Overall performance progression.}
+\label{tab:progression}
+\begin{tabular}{llrrrl}
+\toprule
+Stage & Model & Battles & Remote Viol. & VAC & Overall MAE \\
+\midrule
+CAST Baseline & RF (ACLED only)    & 1.782 & 4.319 & 0.932 & 2.344 \\
+Persistence   & $Y(t) = Y(t-1)$   & 0.902 & 1.119 & 0.771 & 0.931 \\
+\textbf{CAST+} & \textbf{Two-Stage CatBoost} & \textbf{1.384} & \textbf{2.546} & \textbf{0.836} & \textbf{1.589} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{CAST+ vs CAST Baseline on Top-10 Active Regions}
+
+Table~\ref{tab:top10_comparison} presents the fair comparison on the
+top-10 most active regions, using the same RF ACLED-only baseline.
+
+\begin{table}[h]
+\centering
+\caption{Fair comparison on top-10 most active regions.}
+\label{tab:top10_comparison}
+\begin{tabular}{lrrr}
+\toprule
+Target & CAST Baseline MAE & CAST+ MAE & Improvement \\
+\midrule
+Battles         & 63.938 & 29.615  & +53.7\% \\
+Remote Violence & 127.930 & 120.414 & +5.9\%  \\
+VAC             & 12.036 & 6.842   & +43.2\% \\
+\midrule
+\textbf{Overall} & \textbf{67.968} & \textbf{52.290} & \textbf{+23.1\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CAST+ achieves a 23.1\% improvement over the CAST baseline on the
+top-10 most active regions, and an overall MAE of 52.290 compared to
+the CAST baseline of 67.968. CAST+ dominates on Battles (+53.7\%) and
+VAC (+43.2\%). Remote violence shows a smaller improvement (+5.9\%),
+reflecting the extreme scale of activity in the Ukraine conflict regions
+during the holdout period.
+
+\subsection{LGBM-Tweedie Ablation Results}
+
+Tables~\ref{tab:v1_ablation} and \ref{tab:v2_ablation} report overall
+MAE (mean across all three targets and the ten historical top-10
+regions) for the V1 and V2 ablations. Feature sets accumulate
+left to right.
+
+\begin{table}[h]
+\centering
+\caption{V1 ablation: overall MAE by model and feature set
+(historical top-10, 750 evaluations).}
+\label{tab:v1_ablation}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Model} & \textbf{Baseline} & \textbf{+Risk} & \textbf{+Macro} & \textbf{+Holidays} & \textbf{+Engineered} \\
+\midrule
+GBR                & 60.09 & 58.85 & 58.13 & 58.62 & 61.42 \\
+LGBM-Poisson       & 53.63 & 53.73 & 53.65 & 53.69 & \textbf{53.20} \\
+LGBM-Tweedie       & 57.48 & 57.67 & 57.27 & 57.36 & 57.73 \\
+RF (CAST Baseline) & 57.25 & 57.95 & 56.64 & 57.12 & 57.37 \\
+XGBoost            & 62.45 & 62.14 & 62.20 & 62.38 & 60.41 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{V2 ablation: overall MAE by model and feature set
+(historical top-10, 900 evaluations). +Country tier added.}
+\label{tab:v2_ablation}
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Model} & \textbf{Baseline} & \textbf{+Risk} & \textbf{+Macro} & \textbf{+Holidays} & \textbf{+Country} & \textbf{+Engineered} \\
+\midrule
+GBR                   & 64.25 & 65.17 & 67.00 & 65.90 & 69.47          & 63.73 \\
+LGBM-Poisson          & 55.64 & 55.84 & 55.78 & 55.85 & 56.83          & 56.71 \\
+\textbf{LGBM-Tweedie} & 56.84 & 56.94 & 57.62 & 57.59 & \textbf{53.05} & 53.60 \\
+RF (CAST Baseline)    & 58.98 & 59.10 & 60.48 & 59.43 & 60.11          & 60.08 \\
+XGBoost               & 63.84 & 63.22 & 63.17 & 63.40 & 64.10          & 60.56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The +Country tier accounts for all of the V2 improvement for
+LGBM-Tweedie ($-4.54$ MAE, $-7.9\%$); no other tier achieves more
+than a 1.2\% change in either direction.
+
+To enable a direct region-matched comparison with CAST+, the full
+V2 ablation and the RF Baseline were re-run on the paper's
+holdout-period top-10 regions (Table~\ref{tab:paper_top10_lgbm}).
+LGBM-Tweedie +Country achieves MAE 73.06 on these regions, which is
+5.2\% above the RF Baseline (69.47) and 40\% above CAST+ (52.29).
+The reversal relative to the historical top-10 result ($-7.3\%$
+vs RF) reflects the composition of the holdout set: seven of ten
+regions are Ukraine frontlines, where the extreme scale and
+volatility of the Russia-Ukraine war favours the delta+two-stage
+architecture over an absolute-count regressor.
+
+\begin{table}[h]
+\centering
+\caption{Performance on the paper's holdout-period top-10 regions.
+DA-nonzero = directional accuracy on months where conflict changes.}
+\label{tab:paper_top10_lgbm}
+\begin{tabular}{lrrrrl}
+\toprule
+\textbf{Model} & \textbf{Battles} & \textbf{Remote} & \textbf{VaC} & \textbf{Overall MAE} & \textbf{DA-nonzero} \\
+\midrule
+RF Baseline (ACLED-only)   & 64.34 & 132.56 & 11.51 & \textbf{69.47} & --- \\
+LGBM-Tweedie +Country      & 66.68 & 140.21 & 12.29 & \textbf{73.06} & 0.65 \\
+CAST+ (Two-Stage CatBoost) & 29.62 & 120.41 &  6.84 & \textbf{52.29} & 0.79--0.82 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The global LGBM-Tweedie evaluation covers 2,262 regions (requiring
+at least 12 months of data and non-zero training target activity),
+compared to 2,205 for CAST+ (which additionally requires variation
+in monthly delta targets). The 57-region difference reflects the
+different validity criteria appropriate to each model's objective
+and does not indicate a methodological inconsistency. On the metric
+of directional accuracy restricted to changing months (DA-nonzero),
+LGBM-Tweedie achieves 0.84 globally---directly comparable to
+CAST+'s 79--82\%, and substantially higher than the raw all-months
+DA of 0.21, which is depressed by the Tweedie objective's structural
+inability to predict zero in the 83\% of region-months where
+conflict does not change.
+
+\subsection{Conflict Intensity Segmentation}
+
+To understand where CAST+ adds most value, regions were split into three
+tiers per target based on mean monthly event counts: quiet (less than 1),
+moderate (1 to 10), and active (more than 10).
+
+Key findings from this analysis are as follows. Active Remote violence
+regions show a 92\% MAE improvement over persistence, the strongest
+result in the entire evaluation. This is where the two-stage architecture
+adds most value, correctly identifying escalation events in regions with
+established but volatile conflict patterns. Quiet Battles regions show
+CAST+ winning on MAE, indicating usefulness for early conflict onset
+detection. For moderate and active Battles and VAC tiers, persistence
+is competitive on MAE, but CAST+ wins on directional accuracy,
+demonstrating that even where the absolute error is comparable, CAST+
+better identifies the direction of change.
+
+
+% ============================================================
+\section{Discussion}
+
+\subsection{What Worked}
+
+\textbf{Architecture was the biggest driver of improvement.} The
+two-stage design directly addresses the zero-inflation problem. Separating
+the question of whether change occurs from how much it changes allows
+each stage to specialise. Stage 1 achieves meaningful precision on
+identifying escalating months. Stage 2, trained only on nonzero-delta
+months, learns the magnitude structure without the distortion of
+zero-heavy training data.
+
+\textbf{Delta formulation is the right approach.} Predicting change and
+recovering counts is conceptually cleaner and empirically better than
+predicting raw counts directly. It decouples the structural level
+(captured by $Y(t-1)$) from the month-to-month signal (captured by the
+model), making the model's task tractable.
+
+\textbf{Per-target lag strategy matters.} Remote violence and VAC
+benefit from seasonal lags (t-6, t-12) while Battles does not. A
+one-size-fits-all lag structure leaves performance on the table.
+
+\textbf{World Bank features contribute structurally.} Income inequality
+and youth unemployment encode background vulnerability conditions that
+complement the autoregressive conflict signal, particularly for the
+Stage 1 classifier.
+
+\textbf{Holiday and religion interaction features are principled.}
+Although their marginal impact is modest, contextualising holiday counts
+by religious composition is conceptually correct and contributes to
+Stage 1 at low but nonzero importance.
+
+\subsection{What Did Not Work}
+
+\textbf{Risk features add noise in practice.} Despite theoretical
+relevance, removing all risk indicator features improves MAE across
+all three targets in the ablation study. These features are candidates
+for removal in a production pipeline.
+
+\textbf{Religion features alone have no contribution.} Without
+interaction with holiday timing, static religious composition data
+provides no predictive signal.
+
+\textbf{Country hierarchy features provided minimal gain} (less than
+1\%) in the two-stage CatBoost framework, despite being beneficial
+in the LGBM-Tweedie context. This reflects the different way in which
+the two architectures handle the zero-inflation problem.
+
+\textbf{MAPE is not appropriate for this data.} The 86 to 92\%
+zero-delta months cause division-by-zero instability in MAPE
+calculations. Directional accuracy is a more honest metric for
+evaluating 6-month-ahead conflict forecasting.
+
+\subsection{Why Persistence Remains Competitive}
+
+Persistence achieves lower overall MAE than both the CAST baseline
+and CAST+ on the global evaluation (0.931 vs 1.589 and 2.344
+respectively). This is not a failure of the model but a property of
+the data. When 86 to 92\% of delta values are zero, predicting no
+change is trivially accurate on MAE. Persistence has zero ability to
+detect escalation or de-escalation by definition.
+
+CAST+ meaningfully beats persistence on the metrics that matter for
+early warning: directional accuracy (79 to 82\% vs 50\% for a random
+classifier) and MAE in active Remote violence regions (92\%
+improvement). The aggregate MAE comparison is not the right lens for
+evaluating an early warning system.
+
+\subsection{Why the Two Evaluation Setups Differ}
+
+The global evaluation (2,205 regions) and the top-10 evaluation are
+complementary. The global evaluation measures overall system
+performance across the full distribution of conflict intensity, which
+is the appropriate metric for a global forecasting tool. The top-10
+evaluation measures performance in the world's most active conflict
+zones during the holdout period, which is dominated by the Ukraine
+war (7 of the top 10 regions). In sustained peak-intensity war zones,
+all models including the CAST baseline show compressed performance
+differences because the signal environment is qualitatively different
+from the full global distribution.
+
+\subsection{Potential Future Direction: Hybrid Per-Target Architecture}
+
+The results across both model streams suggest a potential further
+improvement: a hybrid architecture where the best-performing model
+is selected per target rather than using a single model for all three.
+Specifically, two-stage CatBoost delivers the strongest performance
+on Battles (+53.7\% on top-10, +22.3\% globally). On the
+holdout-period top-10 evaluation, CAST+ also outperforms
+LGBM-Tweedie for Remote violence (120.41 vs 138.37) and Violence
+against civilians (6.84 vs 12.29), so no single alternative model
+provides an advantage on any individual target in this evaluation
+set. A per-target hybrid architecture remains a direction worth
+exploring as the evaluation expands beyond the
+Ukraine-dominated holdout period.
+
+
+% ============================================================
+\section{Limitations and Future Work}
+
+\textbf{Single holdout window.} All results are based on a single
+six-month chronological holdout. Walk-forward rolling-origin validation
+would provide more stable MAE estimates and reduce sensitivity to the
+specific events of the holdout period.
+
+\textbf{t-1 dependency.} The model heavily relies on t-1 conflict lags
+as its strongest predictors. For a 6-month-ahead forecasting tool this
+creates a practical limitation: the most recent month's data is
+available when the forecast is made, but the model's performance on
+longer horizons within the six-month window has not been separately
+evaluated.
+
+\textbf{Structural breaks.} The model will likely underperform on
+structural breaks, defined as sudden onset or cessation of conflict
+with no historical precedent. Conflict lags and momentum features
+cannot anticipate genuinely novel escalation events. This is a
+fundamental property of any autoregressive forecasting system.
+
+\textbf{Risk features and LLM quality.} The news-scraped risk features
+add noise rather than signal in the current implementation. This may
+reflect data quality limitations in the LLM-parsed outputs, the
+country-to-Admin-1 broadcast losing granularity, or temporal mismatch
+between news mentions and actual events.
+
+\textbf{Religion and holiday features.} While the interaction features
+are conceptually sound, their contribution is modest. More granular
+subnational religious composition data, or event-driven religious
+tension signals, could improve their predictive value.
+
+\textbf{Broader evaluation.} The top-10 evaluation subset is dominated
+by Ukraine (7 of 10 regions during the holdout period). Expanding to
+top-50 or top-100 would include more diverse conflict types where
+trajectory features and structural signals may provide larger gains.
+
+\textbf{Hierarchical and graph-based models.} The country hierarchy
+features tested here are a tree-compatible approximation of a
+hierarchical prior. A proper Bayesian mixed-effects model with country
+as a random intercept, or a graph neural network using the Admin-1
+spatial adjacency graph, would additionally share statistical strength
+across low-activity regions, propagate cross-border spillover through
+the full graph, and learn country-specific trend slopes.
+
+
+% ============================================================
+\section{Conclusion}
+
+This report presents CAST+, an augmented conflict forecasting pipeline
+that improves on the ACLED CAST baseline through enriched data
+integration and a novel two-stage model architecture. The two-stage
+CatBoost model, operating on monthly conflict deltas with per-target
+lag strategies and native categorical feature handling, achieves a
+24.6\% improvement in mean absolute error over the CAST baseline on a
+global evaluation across 2,205 Admin-1 regions, surpassing the project
+target of 20\%. On the top-10 most active regions, CAST+ achieves a
+23.1\% improvement with an overall MAE of 52.290, outperforming all
+alternative model configurations tested. Directional accuracy of 79 to
+82\% confirms the model is detecting meaningful escalation and
+de-escalation patterns.
+
+The core methodological contributions are the delta formulation of the
+prediction target, the two-stage zero-inflation-aware architecture, the
+per-target lag strategy, and the holiday-religion interaction features
+that contextualise calendar effects within the religious structure of
+each country. The key empirical finding is that architecture matters
+more than feature enrichment: switching from single-stage regression
+to the two-stage design is the single largest driver of improvement,
+while most individual feature groups show minimal marginal gains.
+
+The LGBM-Tweedie ablation study establishes that the country-level
+leave-one-out hierarchy feature is the single most impactful
+enrichment for absolute-count conflict regressors ($-7.9\%$ MAE in
+isolation), and confirms that both model streams achieve comparable
+directional accuracy ($\approx 80$--$84\%$) when evaluated on the
+same basis of changing months only. The two streams are structurally
+complementary: CAST+'s two-stage delta architecture excels at change
+detection across the full global distribution, while the LGBM-Tweedie
+ablation provides a cross-model feature map identifying which
+enrichments generalise beyond a single architecture.
+
+All code, data pipelines, and evaluation notebooks are available at
+\url{https://github.com/rapsoj/predicting-global-conflict} (Rosa-Branch).
+
+
+% ============================================================
+\appendix
+
+\section{Repository Structure}
+
+The full project code is available at
+\url{https://github.com/rapsoj/predicting-global-conflict} on the
+Rosa-Branch. Key files for replicating the results in this report are:
+
+\begin{itemize}
+    \item \texttt{forecast\_model/notebooks/final\_rosa.ipynb}: primary
+          CAST+ two-stage CatBoost evaluation.
+    \item \texttt{forecast\_model/notebooks/change\_target\_track.ipynb}:
+          delta formulation experiments, lag strategy ablation,
+          intensity segmentation.
+    \item \texttt{forecast\_model/notebooks/model\_comparison\_4.ipynb}:
+          multi-model ablation benchmark (RF, LGBM-Poisson,
+          LGBM-Tweedie, XGBoost, GBR).
+    \item \texttt{forecast\_model/utils/features/}: World Bank, holiday,
+          and religion feature engineering modules.
+    \item \texttt{forecast\_model/notebooks/WBD\_features.py}: engineered
+          World Bank derived features.
+    \item \texttt{forecast\_model/notebooks/hol\_rel.py}: holiday-religion
+          interaction features.
+    \item \texttt{src/scraping/}: news scraping pipeline.
+    \item \texttt{forecast\_model/utils/risk\_merge.py}: risk indicator
+          merge methodology.
+\end{itemize}
+
+\section{Feature Reference Table}
+
+All features in the enriched dataset. Y = used by model; N = not
+used. Layers 5b and 7 are Rosa's additions not in
+\texttt{model\_data\_v2\_enriched.csv}; Layers 8--9 are Giray's
+additions not used by CAST+.
+
+\begin{longtable}{p{6.2cm} c p{3cm} l c c}
+\toprule
+\textbf{Feature} & \textbf{Layer} & \textbf{Source} & \textbf{Lag} & \textbf{LGBM} & \textbf{CAST+} \\
+\midrule
+\endfirsthead
+\multicolumn{6}{c}{\textit{(continued)}} \\
+\toprule
+\textbf{Feature} & \textbf{Layer} & \textbf{Source} & \textbf{Lag} & \textbf{LGBM} & \textbf{CAST+} \\
+\midrule
+\endhead
+\midrule \multicolumn{6}{r}{\textit{continued on next page}} \\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{6}{l}{\textit{Layer 1 — ACLED Autoregressive}} \\
+Battles $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Explosions/Remote violence $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Protests $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Riots $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Strategic developments $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Violence against civilians $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Excessive force against protesters $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Agreement $(t-1)$ & 1 & ACLED & $t-1$ & Y & Y \\
+Battles\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+Remote\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+Protests\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+Riots\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+Strat.\ dev.\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+VaC\_neighbours $(t-1)$ & 1 & ACLED spatial & $t-1$ & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 2 — Temporal}} \\
+linear\_month\_trend & 2 & Derived & none & Y & Y \\
+year & 2 & Derived & none & Y & Y \\
+month\_sin, month\_cos & 2 & Derived (cyclic) & none & Y & Y \\
+quarter\_sin, quarter\_cos & 2 & Derived (cyclic) & none & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 3 — News-Scraped Risk Indicators}} \\
+risk\_contested\_election $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_crop\_failure $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_economic\_concern $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_ethnic\_tension $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_military\_coup $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_natural\_disaster $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+risk\_political\_assassination $(t-1)$ & 3 & GNews/LLM & $t-1$ & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 4 — World Bank Macroeconomic}} \\
+inflation\_py & 4 & World Bank (CPI) & prior-year & Y & Y \\
+youth\_unemployment\_py & 4 & World Bank & prior-year & Y & Y \\
+income\_inequality\_py & 4 & World Bank (Gini) & prior-year & Y & Y \\
+income\_level\_code & 4 & World Bank metadata & structural & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 5a — Religious Composition (WRP 2010)}} \\
+majority\_religion, majority\_pct & 5a & WRP & static & Y & Y \\
+minority1\_religion, minority1\_pct & 5a & WRP & static & Y & Y \\
+minority2\_religion, minority2\_pct & 5a & WRP & static & Y & Y \\
+nonreligpct & 5a & WRP & static & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 5b — Engineered World Bank Features (Rosa)}} \\
+structural\_vulnerability & 5b & Derived (WB) & prior-year & N & Y \\
+inflation\_shock & 5b & Derived (WB) & prior-year & N & Y \\
+shock\_vulnerability & 5b & Derived (WB) & prior-year & N & Y \\
+capacity\_adjusted\_risk & 5b & Derived (WB) & prior-year & N & Y \\
+inflation\_change & 5b & Derived (WB) & prior-year & N & Y \\
+high\_inequality\_flag & 5b & Derived (WB) & prior-year & N & Y \\
+inflation\_shock\_poor & 5b & Derived (WB) & prior-year & N & Y \\
+conflict\_momentum & 5b & Derived (ACLED) & $t-1$ & N & Y \\
+violence\_escalation & 5b & Derived (ACLED) & $t-1$ & N & Y \\
+macro\_conflict\_pressure & 5b & Derived (ACLED+WB) & $t-1$ & N & Y \\
+\multicolumn{6}{l}{\textit{Layer 6 — Religion-Specific Holiday Features}} \\
+holiday\_count\_month, is\_holiday\_month & 6 & Holiday calendar & current & Y & Y \\
+christian/islam/shia/hindu/buddhist/jewish/ cultural/nonreligious\_holiday\_count & 6 & Holiday calendar & current & Y & Y \\
+\multicolumn{6}{l}{\textit{Layer 7 — Holiday $\times$ Religion Interactions (Rosa)}} \\
+weighted\_holidays\_majority/minority1/minority2 & 7 & Derived (holiday$\times$WRP) & $t-1$ & N & Y \\
+minority\_tension\_minority1/minority2/total & 7 & Derived (holiday$\times$WRP) & $t-1$ & N & Y \\
+total\_religious\_mobilization & 7 & Derived (holiday$\times$WRP) & $t-1$ & N & Y \\
+\multicolumn{6}{l}{\textit{Layer 8 — Country-Level Hierarchy Features (Giray)}} \\
+country\_battles\_excl $(t-1)$ & 8 & Derived (ACLED LOO) & $t-1$ & Y & N \\
+country\_remote\_excl $(t-1)$ & 8 & Derived (ACLED LOO) & $t-1$ & Y & N \\
+country\_vac\_excl $(t-1)$ & 8 & Derived (ACLED LOO) & $t-1$ & Y & N \\
+country\_total\_excl $(t-1)$ & 8 & Derived (ACLED LOO) & $t-1$ & Y & N \\
+\multicolumn{6}{l}{\textit{Layer 9 — Engineered Cross-Variable Features (Giray)}} \\
+Battles/Remote/VaC $(t-2)$ & 9 & ACLED & $t-2$ & Y & N \\
+organized\_violence $(t-1)$ & 9 & Derived (ACLED) & $t-1$ & Y & N \\
+is\_active $(t-1)$ & 9 & Derived (ACLED) & $t-1$ & Y & N \\
+battles\_x\_remote $(t-1)$ & 9 & Derived (ACLED) & $t-1$ & Y & N \\
+Battles/Remote/VaC\_3mo\_avg $(t-1)$ & 9 & Derived (ACLED) & $t-1$ & Y & N \\
+\end{longtable}
+
+\end{document}

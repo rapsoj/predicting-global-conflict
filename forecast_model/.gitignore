@@ -35,7 +35,7 @@ Thumbs.db
 *.pt
 
 # === Project-specific ===
-data/processed/
+data/
 outputs/
 figures/
 

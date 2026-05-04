@@ -51,6 +51,54 @@ PREDICTORS_V2 = [
 # Current-month holiday features — no t-1 lag (holidays are known in advance)
 HOLIDAY_FEATURES_V2 = ['holiday_count_month', 'is_holiday_month']
 
+# All 8 religion-specific holiday counts (Rosa: unused in giray v2)
+HOLIDAY_FEATURES_SPECIFIC = [
+    'christian_holiday_count',
+    'islam_holiday_count',
+    'shia_holiday_count',
+    'hindu_holiday_count',
+    'buddhist_holiday_count',
+    'jewish_holiday_count',
+    'cultural_holiday_count',
+    'nonreligious_holiday_count',
+]
+
+# Holiday × religion interaction features (from hol_rel.py)
+HOLIDAY_INTERACTION_FEATURES = [
+    'weighted_holidays_majority',
+    'weighted_holidays_minority1',
+    'weighted_holidays_minority2',
+    'minority_tension_minority1',
+    'minority_tension_minority2',
+    'minority_tension_total',
+    'total_religious_mobilization',
+]
+
+# Religion identity (label-encoded) + composition percentages
+RELIGION_FEATURES = [
+    'majority_religion',
+    'majority_pct',
+    'minority1_religion',
+    'minority1_pct',
+    'minority2_religion',
+    'minority2_pct',
+    'nonreligpct',
+]
+
+# WBD engineered features (from WBD_features.py)
+WBD_FEATURES = [
+    'structural_vulnerability',
+    'inflation_shock',
+    'shock_vulnerability',
+    'capacity_adjusted_risk',
+    'inflation_change',
+    'high_inequality_flag',
+    'inflation_shock_poor',
+    'conflict_momentum',
+    'violence_escalation',
+    'macro_conflict_pressure',
+]
+
 # Country-level leave-one-out aggregate features (all lagged t-1)
 COUNTRY_FEATURES = [
     'country_battles_excl (t-1)',

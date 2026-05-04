@@ -48,6 +48,8 @@ def find_top_regions(df: pd.DataFrame, targets: list, n: int = 10) -> list:
 
 
 # ── Random Forest evaluator ────────────────────────────────────────────────
+# NOT USED by any current pipeline script. Superseded by evaluate_model().
+# Retained for reference — used in early notebooks (merge.ipynb, model_comparison_4.ipynb).
 
 class ModelEvaluator:
     """
@@ -137,6 +139,7 @@ class ModelEvaluator:
 
 # ── Comparison helpers ─────────────────────────────────────────────────────
 
+# NOT USED by any current pipeline script. Notebook-era comparison helper.
 def run_comparison(df: pd.DataFrame, regions: list, target: str,
                    baseline_preds: list, enhanced_preds: list,
                    evaluator: ModelEvaluator) -> pd.DataFrame:
@@ -159,6 +162,7 @@ def run_comparison(df: pd.DataFrame, regions: list, target: str,
     return pd.DataFrame(records)
 
 
+# NOT USED by any current pipeline script. Notebook-era comparison helper.
 def build_comparison_table(results_df: pd.DataFrame) -> pd.DataFrame:
     """
     Pivot a run_comparison() result into a side-by-side MAE/MAPE table.
@@ -220,6 +224,9 @@ def evaluate_model(df: pd.DataFrame, region: str, target: str,
     y_test  = test[target].fillna(0)
     weights = train.get("importance_weight", pd.Series(1.0, index=train.index)).fillna(1)
 
+    if y_train.sum() == 0:
+        return None
+
     model = model_factory()
     try:
         model.fit(X_train, y_train, sample_weight=weights)
@@ -232,7 +239,23 @@ def evaluate_model(df: pd.DataFrame, region: str, target: str,
     mape   = (np.mean(np.abs((y_test[nz] - y_pred[nz]) / y_test[nz])) * 100
               if nz.any() else np.nan)
 
+    lag_col = f"{target} (t-1)"
+    if lag_col in test.columns:
+        y_prev    = test[lag_col].fillna(0).values
+        true_dir  = np.sign(y_test.values - y_prev)
+        pred_dir  = np.sign(y_pred       - y_prev)
+        dir_acc   = float(np.mean(true_dir == pred_dir))
+        # DA restricted to months where conflict actually changed (matches CatBoost paper definition)
+        changing  = true_dir != 0
+        dir_acc_nonzero = (float(np.mean(true_dir[changing] == pred_dir[changing]))
+                           if changing.any() else np.nan)
+    else:
+        dir_acc = np.nan
+        dir_acc_nonzero = np.nan
+
     return {
-        "mae":  round(mae, 2),
-        "mape": round(mape, 2) if not np.isnan(mape) else np.nan,
+        "mae":                          round(mae, 2),
+        "mape":                         round(mape, 2) if not np.isnan(mape) else np.nan,
+        "directional_accuracy":         round(dir_acc, 4) if not np.isnan(dir_acc) else np.nan,
+        "directional_accuracy_nonzero": round(dir_acc_nonzero, 4) if not np.isnan(dir_acc_nonzero) else np.nan,
     }

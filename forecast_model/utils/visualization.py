@@ -24,6 +24,7 @@ from IPython.display import display as _ipy_display
 
 # ── MAE comparison bar chart ───────────────────────────────────────────────
 
+# NOT USED by any current pipeline script. Notebook-era plotting utility.
 def plot_mae_comparison(results_df: pd.DataFrame, target: str,
                         save_path: str = None) -> None:
     """
@@ -65,6 +66,7 @@ def plot_mae_comparison(results_df: pd.DataFrame, target: str,
 
 # ── Forecast line plots ────────────────────────────────────────────────────
 
+# NOT USED by any current pipeline script. Notebook-era plotting utility.
 def plot_forecasts(results_df: pd.DataFrame, target: str,
                    save_path: str = None) -> None:
     """
@@ -137,6 +139,7 @@ def plot_forecasts(results_df: pd.DataFrame, target: str,
 
 # ── Feature importance bar chart ───────────────────────────────────────────
 
+# NOT USED by any current pipeline script. Notebook-era plotting utility.
 def plot_risk_feature_importance(results_df: pd.DataFrame,
                                  risk_prefix: str = "risk_",
                                  save_path: str = None) -> None:
