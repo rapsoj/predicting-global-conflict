@@ -20,8 +20,61 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 
+_DEFAULT_TARGETS = [
+    'Battles',
+    'Explosions/Remote violence',
+    'Violence against civilians',
+]
+
 
 # ── Region selection ───────────────────────────────────────────────────────
+
+def stratify_regions(df: pd.DataFrame, n: int = 8,
+                     targets: list | None = None,
+                     holdout: int = 6) -> dict:
+    """
+    Classify all admin-1 regions by training-period activity level.
+
+    Tiers
+    -----
+    always_active : frac_nonzero > 0.70 AND mean_y > 5
+    dormant       : frac_nonzero < 0.15
+    sporadic      : everything else
+
+    Returns dict with up to n region names per tier, sorted by mean_y (always),
+    frac_nonzero desc (sporadic, dormant).
+    """
+    if targets is None:
+        targets = _DEFAULT_TARGETS
+
+    rows = []
+    for region in df['matched_admin1_id'].unique():
+        rdf = df[df['matched_admin1_id'] == region]
+        if len(rdf) < holdout + 6:
+            continue
+        train = rdf.iloc[:-holdout]
+        avail = [t for t in targets if t in train.columns]
+        vals  = pd.concat([train[t].fillna(0) for t in avail])
+        rows.append({
+            'region':       region,
+            'frac_nonzero': float((vals > 0).mean()),
+            'mean_y':       float(vals.mean()),
+        })
+
+    st = pd.DataFrame(rows)
+    always   = st[(st['frac_nonzero'] > 0.70) & (st['mean_y'] > 5)]
+    dormant  = st[st['frac_nonzero'] < 0.15]
+    sporadic = st[~st.index.isin(always.index) & ~st.index.isin(dormant.index)]
+
+    pick = lambda sub, col, asc: (
+        sub.sort_values(col, ascending=asc).head(n)['region'].tolist()
+    )
+    return {
+        'always_active': pick(always,   'mean_y',       False),
+        'sporadic':      pick(sporadic,  'frac_nonzero', False),
+        'dormant':       pick(dormant,   'frac_nonzero', False),
+    }
+
 
 def find_top_regions(df: pd.DataFrame, targets: list, n: int = 10) -> list:
     """

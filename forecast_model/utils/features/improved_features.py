@@ -21,6 +21,67 @@ import numpy as np
 import pandas as pd
 
 
+# ── V3: Trajectory features ───────────────────────────────────────────────────
+
+def add_trajectory_features(df: pd.DataFrame, targets: list | None = None) -> tuple:
+    """
+    Add slope and acceleration features for each target's lag series (items 4 & 9).
+
+    For each target t:
+      {t}_slope(t-1)  = t(t-1) - t(t-2)
+      {t}_accel(t-1)  = (t(t-1)-t(t-2)) - (t(t-2)-t(t-3))
+    Neighbour slope:
+      {t}_nbr_slope(t-1) = neighbour_count(t-1) - neighbour_count(t-2)
+
+    Parameters
+    ----------
+    df      : flat DataFrame with matched_admin1_id sorted by month_year.
+    targets : list of target column names. Defaults to the three ACLED targets.
+
+    Returns
+    -------
+    (df_with_new_cols, list_of_new_col_names)
+    """
+    if targets is None:
+        targets = [
+            'Battles',
+            'Explosions/Remote violence',
+            'Violence against civilians',
+        ]
+
+    df = df.copy().sort_values(['matched_admin1_id', 'month_year'])
+    grp = df.groupby('matched_admin1_id')
+    new_cols = []
+
+    for t in targets:
+        t1, t2 = f'{t} (t-1)', f'{t} (t-2)'
+        if t1 not in df.columns or t2 not in df.columns:
+            continue
+        sc = f'{t}_slope(t-1)'
+        df[sc] = df[t1] - df[t2]
+        new_cols.append(sc)
+
+        # t-3 derived by shifting the t-2 column within each region
+        t3 = grp[t2].shift(1)
+        ac = f'{t}_accel(t-1)'
+        df[ac] = (df[t1] - df[t2]) - (df[t2] - t3)
+        new_cols.append(ac)
+
+    nbr_map = {
+        'Battles':                    'Battles_neighbours (t-1)',
+        'Explosions/Remote violence': 'Explosions/Remote violence_neighbours (t-1)',
+        'Violence against civilians': 'Violence against civilians_neighbours (t-1)',
+    }
+    for t, nc in nbr_map.items():
+        if nc not in df.columns:
+            continue
+        sc = f'{t}_nbr_slope(t-1)'
+        df[sc] = df[nc] - grp[nc].shift(1)
+        new_cols.append(sc)
+
+    return df.fillna(0), new_cols
+
+
 # ── Predictor lists for the v2 pipeline ──────────────────────────────────────
 
 # Replaces 11 month dummies (month_2..month_12) + 3 quarter dummies (quarter_2..quarter_4)

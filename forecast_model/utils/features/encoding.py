@@ -15,6 +15,63 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
 
+# ── V3: Per-split and global label encoding (Rosa-style) ─────────────────────
+
+def encode_categoricals(X_train: pd.DataFrame, X_test: pd.DataFrame,
+                        cols: list) -> tuple:
+    """
+    Fit LabelEncoder on training data only, then apply to test.
+
+    Unknown test values (and missing values) → -1.
+    Matches Rosa's per-split encode_categoricals() approach — no leakage.
+
+    Parameters
+    ----------
+    X_train, X_test : feature DataFrames (copies are made internally).
+    cols            : column names to encode (skips columns not present).
+
+    Returns
+    -------
+    (X_train_enc, X_test_enc) with integer-encoded columns.
+    """
+    X_train = X_train.copy()
+    X_test  = X_test.copy()
+
+    for col in cols:
+        if col not in X_train.columns:
+            continue
+        le = LabelEncoder()
+        train_vals = X_train[col].fillna('__MISSING__').astype(str)
+        test_vals  = X_test[col].fillna('__MISSING__').astype(str)
+
+        le.fit(train_vals)
+        known = set(le.classes_)
+
+        X_train[col] = le.transform(train_vals)
+        X_test[col]  = test_vals.map(
+            lambda x, k=known, e=le: e.transform([x])[0] if x in k else -1
+        )
+
+    return X_train, X_test
+
+
+def apply_global_label_encoding(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+    """
+    Encode label columns globally (fit_transform on the whole DataFrame).
+
+    Safe for static attributes like country_code and religion that do not
+    vary over time within a region. Returns a copy with integer columns.
+    """
+    df = df.copy()
+    for col in cols:
+        if col not in df.columns:
+            continue
+        le = LabelEncoder()
+        vals = df[col].fillna('__MISSING__').astype(str)
+        df[col] = le.fit_transform(vals).astype(int)
+    return df
+
+
 # ── Count columns that benefit from log1p (zero-inflated, heavy right tail) ──
 
 _COUNT_COLS = [
